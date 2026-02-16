@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>待办事项 Web App</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>📋 待办事项管理</h1>
+        <p>支持优先级、截止日期和历史记录追踪</p>
+      </header>
+
+      <section class="card">
+        <h2>新增待办</h2>
+        <form id="todo-form">
+          <div class="grid">
+            <label>
+              标题
+              <input id="title" name="title" type="text" placeholder="例如：准备周报" required />
+            </label>
+
+            <label>
+              优先级
+              <select id="priority" name="priority">
+                <option value="high">高</option>
+                <option value="medium" selected>中</option>
+                <option value="low">低</option>
+              </select>
+            </label>
+
+            <label>
+              截止日期
+              <input id="dueDate" name="dueDate" type="date" required />
+            </label>
+          </div>
+
+          <label>
+            备注
+            <textarea id="description" name="description" rows="3" placeholder="可选"></textarea>
+          </label>
+
+          <button type="submit">添加待办</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <h2>待办列表</h2>
+          <div class="filters">
+            <label>
+              筛选
+              <select id="status-filter">
+                <option value="all">全部</option>
+                <option value="pending">进行中</option>
+                <option value="completed">已完成</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <ul id="todo-list" class="todo-list"></ul>
+      </section>
+
+      <section class="card history">
+        <div class="section-title">
+          <h2>历史记录</h2>
+          <button id="clear-history" class="danger" type="button">清空历史</button>
+        </div>
+        <ul id="history-list" class="history-list"></ul>
+      </section>
+    </main>
+
+    <template id="todo-item-template">
+      <li class="todo-item">
+        <div class="todo-main">
+          <label class="check-wrap">
+            <input type="checkbox" class="toggle-complete" />
+            <span class="title"></span>
+          </label>
+          <div class="meta">
+            <span class="priority-tag"></span>
+            <span class="due-date"></span>
+          </div>
+          <p class="description"></p>
+        </div>
+        <button class="danger delete-btn" type="button">删除</button>
+      </li>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
