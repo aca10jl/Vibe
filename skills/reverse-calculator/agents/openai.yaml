@@ -1,0 +1,7 @@
+﻿interface:
+  display_name: "Reverse Calculator"
+  short_description: "Compute expressions and return reversed result values"
+  default_prompt: "Use $reverse-calculator to evaluate a math expression and return the reversed result value."
+
+policy:
+  allow_implicit_invocation: true
