@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python Project to Skill"
+  short_description: "Convert Python repos into AI skills"
+  default_prompt: "Convert these Python projects into reusable Codex skills with automation and validation."
