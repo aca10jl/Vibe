@@ -65,9 +65,10 @@ class MoEConfig:
 
 class MoERouter(nn.Module):
     """
-    MoE 路由器：
+    稀疏 MoE 路由器：
     - top_k=1: 单专家硬路由
     - top_k=2: 双专家软融合路由
+    - 前向仅计算被路由选中的专家，避免所有专家全量推理
     """
 
     def __init__(self, config: MoEConfig) -> None:
@@ -93,11 +94,6 @@ class MoERouter(nn.Module):
             nn.Linear(config.hidden_dim, self.num_experts),
         )
 
-    def _all_expert_outputs(self, x: torch.Tensor) -> torch.Tensor:
-        """堆叠所有专家输出，形状 [B, E, D]。"""
-        outputs = [expert(x) for expert in self.experts]
-        return torch.stack(outputs, dim=1)
-
     def route(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         返回:
@@ -109,17 +105,35 @@ class MoERouter(nn.Module):
         gate_probs = torch.softmax(gate_logits, dim=-1)
         top_weights, top_indices = torch.topk(gate_probs, k=self.config.top_k, dim=-1)
 
-        # top-k 内重新归一化，保证融合权重稳定
         top_weights = top_weights / top_weights.sum(dim=-1, keepdim=True)
         return top_indices, top_weights, gate_probs
 
+    def _sparse_selected_outputs(self, x: torch.Tensor, top_indices: torch.Tensor) -> torch.Tensor:
+        """仅对被选中专家做推理，返回形状 [B, K, D]。"""
+        batch_size = x.size(0)
+        top_k = self.config.top_k
+        output_dim = self.config.output_dim
+
+        selected_outputs = torch.zeros(
+            batch_size,
+            top_k,
+            output_dim,
+            device=x.device,
+            dtype=x.dtype,
+        )
+
+        for slot in range(top_k):
+            slot_expert_ids = top_indices[:, slot]
+            for expert_id, expert in enumerate(self.experts):
+                mask = slot_expert_ids == expert_id
+                if mask.any():
+                    selected_outputs[mask, slot, :] = expert(x[mask])
+
+        return selected_outputs
+
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        expert_outputs = self._all_expert_outputs(x)
         top_indices, top_weights, gate_probs = self.route(x)
-
-        gather_index = top_indices.unsqueeze(-1).expand(-1, -1, self.config.output_dim)
-        selected_outputs = torch.gather(expert_outputs, dim=1, index=gather_index)
-
+        selected_outputs = self._sparse_selected_outputs(x, top_indices)
         prediction = (selected_outputs * top_weights.unsqueeze(-1)).sum(dim=1)
         return prediction, top_indices, top_weights, gate_probs
 
