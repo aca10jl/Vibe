@@ -1,4 +1,5 @@
 import pathlib
+import sys
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -111,25 +112,26 @@ class MoERouter(nn.Module):
     def _sparse_selected_outputs(self, x: torch.Tensor, top_indices: torch.Tensor) -> torch.Tensor:
         """仅对被选中专家做推理，返回形状 [B, K, D]。"""
         batch_size = x.size(0)
-        top_k = self.config.top_k
         output_dim = self.config.output_dim
+        slot_outputs = []
 
-        selected_outputs = torch.zeros(
-            batch_size,
-            top_k,
-            output_dim,
-            device=x.device,
-            dtype=x.dtype,
-        )
-
-        for slot in range(top_k):
+        for slot in range(self.config.top_k):
             slot_expert_ids = top_indices[:, slot]
+            slot_output = torch.zeros(
+                batch_size,
+                output_dim,
+                device=x.device,
+                dtype=x.dtype,
+            )
             for expert_id, expert in enumerate(self.experts):
-                mask = slot_expert_ids == expert_id
-                if mask.any():
-                    selected_outputs[mask, slot, :] = expert(x[mask])
+                # Avoid Python data-dependent branch for ONNX tracing/export.
+                sample_idx = torch.nonzero(slot_expert_ids == expert_id, as_tuple=False).squeeze(1)
+                expert_inputs = torch.index_select(x, 0, sample_idx)
+                expert_outputs = expert(expert_inputs)
+                slot_output = torch.index_add(slot_output, 0, sample_idx, expert_outputs)
+            slot_outputs.append(slot_output)
 
-        return selected_outputs
+        return torch.stack(slot_outputs, dim=1)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         top_indices, top_weights, gate_probs = self.route(x)
@@ -145,23 +147,29 @@ class MoERouter(nn.Module):
 
 
 def export_to_onnx(model: nn.Module, onnx_path: str, input_dim: int) -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+
     model.eval()
     dummy_input = torch.randn(2, input_dim)
     pathlib.Path(onnx_path).parent.mkdir(parents=True, exist_ok=True)
 
     torch.onnx.export(
         model,
-        dummy_input,
+        (dummy_input,),
         onnx_path,
-        opset_version=17,
+        opset_version=18,
         input_names=["input"],
         output_names=["prediction", "selected_experts", "expert_weights", "gate_probs"],
-        dynamic_axes={
-            "input": {0: "batch_size"},
-            "prediction": {0: "batch_size"},
-            "selected_experts": {0: "batch_size"},
-            "expert_weights": {0: "batch_size"},
-            "gate_probs": {0: "batch_size"},
+        dynamic_shapes={
+            "x": {
+                0: torch.export.Dim("batch_size"),
+            }
         },
     )
 
@@ -202,10 +210,10 @@ def demo() -> None:
         print("prediction shape:", tuple(prediction.shape))
         print("selected experts:\n", expert_idx)
         print("expert weights:\n", expert_w)
-        print("gate probs sum (first sample):", float(gate_probs[0].sum()))
+        print("gate probs sum (first sample):", float(gate_probs[0].sum().detach()))
 
-        losses = one_step_train_example(model, sample_x, sample_y)
-        print("train losses:", losses)
+        # losses = one_step_train_example(model, sample_x, sample_y)
+        # print("train losses:", losses)
 
         onnx_file = f"artifacts/moe_router_top{top_k}.onnx"
         export_to_onnx(model, onnx_file, input_dim)
