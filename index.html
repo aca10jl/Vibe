@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>待办事项</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1 class="app-title">待办事项</h1>
+      <p class="app-date" id="currentDate"></p>
+    </header>
+
+    <div class="input-section">
+      <div class="input-wrapper">
+        <input
+          type="text"
+          id="todoInput"
+          class="todo-input"
+          placeholder="添加新任务..."
+          maxlength="100"
+        />
+        <select id="prioritySelect" class="priority-select">
+          <option value="normal">普通</option>
+          <option value="important">重要</option>
+          <option value="urgent">紧急</option>
+        </select>
+        <button id="addBtn" class="add-btn" aria-label="添加任务">+</button>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <button class="filter-btn active" data-filter="all">全部</button>
+      <button class="filter-btn" data-filter="active">进行中</button>
+      <button class="filter-btn" data-filter="completed">已完成</button>
+    </div>
+
+    <div class="stats-bar">
+      <span id="statsText">共 0 项任务</span>
+      <button id="clearCompleted" class="clear-btn">清除已完成</button>
+    </div>
+
+    <ul class="todo-list" id="todoList">
+      <li class="empty-state" id="emptyState">
+        <div class="empty-icon">✓</div>
+        <p>暂无任务，请添加新任务</p>
+      </li>
+    </ul>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
