@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 import tensorflow as tf
@@ -30,6 +30,38 @@ class ModelConfig:
     topk_default: int = 2
     top1_confidence_threshold: float = 0.75
     seed: int = 7
+
+
+def estimate_compute_cost(cfg: ModelConfig, top1_ratio: float) -> Dict[str, float]:
+    """Estimate MACs/FLOPs saving when routing only 1~2 experts.
+
+    Notes:
+    - This estimation is for deployment architecture where gate and experts are served separately,
+      so only selected experts are executed.
+    - In a monolithic graph that always computes all experts, practical savings will not materialize.
+    """
+    if not 0.0 <= top1_ratio <= 1.0:
+        raise ValueError("top1_ratio must be in [0, 1].")
+
+    # Dense layer cost (MACs/sample): in_dim * out_dim
+    gate_macs = cfg.input_dim * cfg.hidden_dim + cfg.hidden_dim * cfg.num_experts
+    expert_macs = cfg.input_dim * cfg.hidden_dim + cfg.hidden_dim * cfg.output_dim
+
+    full_macs = gate_macs + cfg.num_experts * expert_macs
+    expected_k = top1_ratio * 1.0 + (1.0 - top1_ratio) * 2.0
+    routed_macs = gate_macs + expected_k * expert_macs
+
+    saving_ratio = 1.0 - (routed_macs / full_macs)
+
+    # FLOPs roughly 2x MACs for multiply+add.
+    return {
+        "expected_k": expected_k,
+        "full_macs": full_macs,
+        "routed_macs": routed_macs,
+        "saving_ratio": saving_ratio,
+        "full_flops": full_macs * 2.0,
+        "routed_flops": routed_macs * 2.0,
+    }
 
 
 class MoEGraphBuilder:
@@ -194,6 +226,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output_dim", type=int, default=4)
     parser.add_argument("--num_experts", type=int, default=4)
     parser.add_argument("--top1_threshold", type=float, default=0.75)
+    parser.add_argument(
+        "--top1_ratio",
+        type=float,
+        default=0.7,
+        help="Estimated ratio of samples routed to top-1 for compute-saving estimation.",
+    )
     parser.add_argument("--skip_sanity", action="store_true")
     return parser.parse_args()
 
@@ -222,12 +260,22 @@ def main() -> None:
     freeze_graph_to_pb(graph, args.output_pb, output_node_names=outputs)
     print(f"[export] Frozen PB saved to: {args.output_pb}")
 
+    cost = estimate_compute_cost(cfg, top1_ratio=args.top1_ratio)
+    print(
+        "[cost] expected_k={expected_k:.3f}, full_macs={full_macs:.0f}, "
+        "routed_macs={routed_macs:.0f}, saving={saving_ratio:.2%}".format(**cost)
+    )
+
     if not args.skip_sanity:
         sanity_check_inference(args.output_pb, cfg)
 
     print("[done] You can compile with ATC, e.g.:\n"
           "atc --framework=3 --model=build/moe_router_frozen.pb "
           "--input_shape='input_features:1,16' --soc_version=Ascend310")
+    print(
+        "[tip] To realize compute saving on Ascend, deploy gate and experts as separate models "
+        "and invoke only top-1/top-2 selected experts."
+    )
 
 
 if __name__ == "__main__":

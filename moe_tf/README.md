@@ -65,3 +65,29 @@ atc \
 
 5. **业务需要兜底策略**  
    `route_override` 可在服务端强制 top-1 或 top-2，便于灰度或异常回退。
+
+## 5. MoE 路由节约计算量评估
+
+可通过脚本直接打印估算值：
+
+```bash
+python3 moe_tf/export_moe_pb.py --top1_ratio 0.7 --skip_sanity
+```
+
+估算公式（按单样本 MACs）：
+
+- `gate_macs = input_dim*hidden_dim + hidden_dim*num_experts`
+- `expert_macs = input_dim*hidden_dim + hidden_dim*output_dim`
+- `full_macs = gate_macs + num_experts*expert_macs`
+- `expected_k = top1_ratio*1 + (1-top1_ratio)*2`
+- `routed_macs = gate_macs + expected_k*expert_macs`
+- `saving_ratio = 1 - routed_macs/full_macs`
+
+以默认配置（`input=16, hidden=32, output=4, experts=4`）和 `top1_ratio=0.7` 为例：
+
+- `full_macs = 3200`
+- `routed_macs = 1472`
+- `saving_ratio = 54.00%`
+
+> 重要：上述节省成立的前提是“门控模型 + 专家模型分离部署”，仅调用 top-1/top-2 专家。
+> 如果仍将所有专家放在一个单体图中统一前向（即使权重为 0），硬件侧通常仍会执行全部专家计算，无法获得等比例算力节省。
