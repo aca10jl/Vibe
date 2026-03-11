@@ -1,0 +1,62 @@
+[
+    {
+        "pattern": "(?i)ERROR.*database.*connection",
+        "description": "数据库连接错误",
+        "severity": "ERROR",
+        "category": "database"
+    },
+    {
+        "pattern": "(?i)failed to (start|stop|restart) service",
+        "description": "服务启动/停止失败",
+        "severity": "ERROR",
+        "category": "service"
+    },
+    {
+        "pattern": "(?i)SSL.*handshake.*(fail|error)",
+        "description": "SSL 握手失败",
+        "severity": "ERROR",
+        "category": "security"
+    },
+    {
+        "pattern": "(?i)disk usage.*(9[0-9]|100)%",
+        "description": "磁盘使用率超过 90%",
+        "severity": "WARN",
+        "category": "resource"
+    },
+    {
+        "pattern": "(?i)CPU.*load.*(average|avg).*([5-9]\\d|[1-9]\\d{2,})",
+        "description": "CPU 负载过高",
+        "severity": "WARN",
+        "category": "performance"
+    },
+    {
+        "pattern": "(?i)authentication (fail|error|denied)",
+        "description": "认证失败",
+        "severity": "WARN",
+        "category": "security"
+    },
+    {
+        "pattern": "(?i)worker.*process.*exit|child process.*died",
+        "description": "工作进程异常退出",
+        "severity": "ERROR",
+        "category": "process"
+    },
+    {
+        "pattern": "(?i)queue.*full|backlog.*exceeded",
+        "description": "消息队列满/积压",
+        "severity": "WARN",
+        "category": "performance"
+    },
+    {
+        "pattern": "(?i)replication.*(lag|behind|fail)",
+        "description": "数据库复制延迟或失败",
+        "severity": "ERROR",
+        "category": "database"
+    },
+    {
+        "pattern": "(?i)out of (file )?descriptors",
+        "description": "文件描述符耗尽",
+        "severity": "ERROR",
+        "category": "resource"
+    }
+]
