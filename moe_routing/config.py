@@ -1,12 +1,12 @@
 # ==============================================================================
-# MoE 路由模型配置
+# MoE 路由模型配置（V2 —— 支持图像检测专家）
 # 适配 Ascend CANN ATC 工具编译 om 离线推理模型
 # ==============================================================================
 
 MODEL_CONFIG = {
     # --- 输入/输出维度 ---
-    'input_dim': 128,
-    'output_dim': 64,
+    # 门控网络的特征输入维度（从原始图像提取的特征向量长度）
+    'gate_input_dim': 128,
 
     # --- MoE 路由参数 ---
     'num_experts': 4,
@@ -15,11 +15,15 @@ MODEL_CONFIG = {
     # --- 门控网络结构 ---
     'gate_hidden_dim': 64,
 
-    # --- 专家网络结构 ---
+    # --- 默认专家网络结构（当用户不提供自定义专家时使用） ---
     'expert_hidden_dim': 256,
 
+    # --- 图像检测专家的输入输出规格 ---
+    'image_shape': [1, 1, 448, 448],   # NCHW
+    'image_dtype': 'uint8',
+
     # --- 置信度阈值 ---
-    # 当 top-1 专家置信度超过此值时只用 1 个专家，否则用 2 个
+    # 当 top-1 专家置信度超过此值时只用 1 个专家，否则用 top_k 个
     'confidence_threshold': 0.7,
 
     # --- ATC 部署参数 ---
@@ -36,7 +40,7 @@ TRAIN_CONFIG = {
 
 OUTPUT_CONFIG = {
     'pb_path': 'output/moe_routing_model.pb',
-    'input_node': 'input_tensor',
+    'input_node': 'input_features',
     'output_nodes': [
         'moe/output',
         'moe/routing_indices',

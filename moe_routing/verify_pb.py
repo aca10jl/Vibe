@@ -1,5 +1,5 @@
 # ==============================================================================
-# pb 模型验证脚本
+# pb 模型验证脚本 V2
 #
 # 功能：
 #   1. 加载 frozen pb，打印图节点信息
@@ -7,6 +7,7 @@
 #   3. 检查 tf.cond 条件分支是否存在（Switch/Merge 节点）
 #   4. 检测 ATC 不兼容算子
 #   5. 验证确定性推理
+#   6. 支持 top_k=1 和 top_k=2
 # ==============================================================================
 
 import os
@@ -36,6 +37,9 @@ ATC_SUPPORTED_OPS = {
     'OneHot', 'Tile', 'Range',
     'NoOp', 'Assert',
     'Enter', 'Exit', 'NextIteration', 'LoopCond',  # 控制流
+    'Conv2D', 'DepthwiseConv2dNative', 'MaxPool', 'AvgPool',  # 卷积相关
+    'Pad', 'PadV2', 'MirrorPad',
+    'Round', 'Sqrt', 'Rsqrt', 'Square', 'Abs', 'Neg',
 }
 
 
@@ -68,7 +72,6 @@ def check_atc_compatibility(graph_def):
     else:
         print("  [PASS] 所有算子在常见 ATC 支持列表中。")
 
-    # 检查控制流节点（tf.cond 的标志）
     switch_count = sum(1 for n in graph_def.node if n.op == 'Switch')
     merge_count = sum(1 for n in graph_def.node if n.op == 'Merge')
     print(f"\n  tf.cond 控制流节点: Switch={switch_count}, Merge={merge_count}")
@@ -91,10 +94,9 @@ def verify_pb(pb_path, model_config):
     # 打印关键节点
     print("\n[关键节点]")
     for node in graph_def.node:
-        if any(kw in node.name for kw in ['input_tensor', 'output', 'routing', 'cond_expert']):
+        if any(kw in node.name for kw in ['input_features', 'output', 'routing', 'cond_expert']):
             print(f"  {node.op:20s} {node.name}")
 
-    # ATC 兼容性检查
     unsupported = check_atc_compatibility(graph_def)
 
     # 导入图
@@ -108,13 +110,12 @@ def verify_pb(pb_path, model_config):
     routing_w_tensor = graph.get_tensor_by_name(f"{OUTPUT_CONFIG['output_nodes'][2]}:0")
 
     batch_size = model_config['infer_batch_size']
-    input_dim = model_config['input_dim']
-    output_dim = model_config['output_dim']
+    input_dim = model_config['gate_input_dim']
     top_k = model_config['top_k']
 
     with tf.compat.v1.Session(graph=graph) as sess:
         # Test 1: 基本推理
-        print(f"\n[Test 1] 基本推理 (batch_size={batch_size})")
+        print(f"\n[Test 1] 基本推理 (batch_size={batch_size}, top_k={top_k})")
         X = np.random.randn(batch_size, input_dim).astype(np.float32)
         out, idx, w = sess.run(
             [output_tensor, routing_idx_tensor, routing_w_tensor],
@@ -123,7 +124,7 @@ def verify_pb(pb_path, model_config):
         print(f"  输出 shape: {out.shape}")
         print(f"  路由索引:   {idx}")
         print(f"  路由权重:   {np.round(w, 4)}")
-        assert out.shape == (batch_size, output_dim), f"输出形状错误: {out.shape}"
+        assert out.shape == (batch_size, input_dim), f"输出形状错误: {out.shape}"
         assert idx.shape == (batch_size, top_k), f"路由索引形状错误: {idx.shape}"
         print("  [PASS]")
 
@@ -147,7 +148,10 @@ def verify_pb(pb_path, model_config):
                 feed_dict={input_tensor: X_cls},
             )
             top1_w = w_cls[0, 0]
-            mode = "单专家" if top1_w >= 0.99 else "双专家"
+            if top_k == 1:
+                mode = "单专家"
+            else:
+                mode = "单专家" if top1_w >= 0.99 else "双专家"
             print(f"  类别 {cls} -> 专家 {idx_cls[0]}, 权重 {np.round(w_cls[0], 3)}, 模式: {mode}")
         print("  [PASS]")
 
@@ -160,7 +164,6 @@ def verify_pb(pb_path, model_config):
                 feed_dict={input_tensor: X_rand},
             )
             w_sum = w_rand.sum(axis=1)
-            # 单专家模式：[1.0, 0.0]，双专家模式：归一化和为 1.0
             assert np.all(w_sum >= 0.99), f"权重和异常: {w_sum}"
         print("  [PASS] 路由权重归一化正确。")
 

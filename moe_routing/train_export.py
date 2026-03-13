@@ -1,11 +1,10 @@
 # ==============================================================================
-# MoE 模型训练 + 冻结 pb 导出
+# MoE 模型训练 + 冻结 pb 导出 V2
 #
-# 流程：
-#   1. 训练阶段：使用 build_moe_graph_train（所有专家均参与，确保梯度传播）
-#   2. 导出阶段：构建新的推理图 build_moe_graph（含 tf.cond 条件执行）
-#   3. 从训练好的变量复制权重到推理图
-#   4. 冻结导出 frozen pb
+# 改进：
+#   - 支持 top_k=1 和 top_k=2
+#   - 支持用户注册自定义专家（从 PyTorch 转换或自定义 builder）
+#   - 门控网络特征维度与图像检测专家维度解耦
 # ==============================================================================
 
 import os
@@ -17,7 +16,7 @@ tf.compat.v1.disable_eager_execution()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from config import MODEL_CONFIG, TRAIN_CONFIG, OUTPUT_CONFIG
-from model import build_moe_graph, build_moe_graph_train
+from model import build_moe_graph, build_moe_graph_train, ExpertRegistry, set_registry
 
 
 def generate_synthetic_batch(batch_size, input_dim, output_dim, num_classes=4):
@@ -47,26 +46,31 @@ def load_balancing_loss(routing_probs, num_experts):
     return tf.cast(num_experts, tf.float32) * tf.reduce_sum(mean_probs * mean_probs)
 
 
-def train(model_config, train_config):
+def train(model_config, train_config, registry=None):
     """训练阶段：所有专家均参与计算。"""
+    input_dim = model_config['gate_input_dim']
+    top_k = model_config['top_k']
+
     print("=" * 60)
     print("MoE 路由模型训练")
     print("=" * 60)
-    print(f"  专家数量: {model_config['num_experts']}")
-    print(f"  Top-K:    {model_config['top_k']}")
-    print(f"  输入维度: {model_config['input_dim']}")
-    print(f"  输出维度: {model_config['output_dim']}")
+    print(f"  专家数量:     {model_config['num_experts']}")
+    print(f"  Top-K:        {top_k}")
+    print(f"  门控特征维度: {input_dim}")
+    if registry:
+        print(f"\n[专家注册表]")
+        print(registry.summary())
     print()
 
     train_graph = tf.compat.v1.Graph()
     with train_graph.as_default():
-        inputs = tf.compat.v1.placeholder(tf.float32, [None, model_config['input_dim']],
-                                          name="input_tensor")
-        targets = tf.compat.v1.placeholder(tf.float32, [None, model_config['output_dim']],
+        inputs = tf.compat.v1.placeholder(tf.float32, [None, input_dim],
+                                          name="input_features")
+        targets = tf.compat.v1.placeholder(tf.float32, [None, input_dim],
                                            name="target_tensor")
 
         output, routing_indices, routing_weights, routing_probs = \
-            build_moe_graph_train(inputs, model_config)
+            build_moe_graph_train(inputs, model_config, registry)
 
         task_loss = tf.reduce_mean(tf.square(output - targets))
         lb_loss = load_balancing_loss(routing_probs, model_config['num_experts'])
@@ -83,8 +87,8 @@ def train(model_config, train_config):
     for step in range(1, train_config['num_steps'] + 1):
         X_batch, Y_batch = generate_synthetic_batch(
             train_config['train_batch_size'],
-            model_config['input_dim'],
-            model_config['output_dim'],
+            input_dim,
+            input_dim,
             num_classes=model_config['num_experts'],
         )
         _, loss_val, task_l, lb_l, r_idx = sess.run(
@@ -104,8 +108,7 @@ def train(model_config, train_config):
     # 提取训练好的变量值
     trained_vars = {}
     for var in train_graph.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
-        name = var.name  # e.g. "moe/gate/w1:0"
-        # 跳过优化器变量
+        name = var.name
         if 'Adam' in name or 'beta' in name or 'power' in name:
             continue
         trained_vars[name] = sess.run(var)
@@ -113,23 +116,25 @@ def train(model_config, train_config):
     return trained_vars
 
 
-def export_inference_pb(trained_vars, model_config, output_config):
+def export_inference_pb(trained_vars, model_config, output_config, registry=None):
     """构建推理图（含 tf.cond），加载训练权重，冻结导出。"""
+    input_dim = model_config['gate_input_dim']
+    top_k = model_config['top_k']
+
     print("=" * 60)
-    print("构建推理图并导出 frozen pb")
+    print(f"构建推理图并导出 frozen pb (top_k={top_k})")
     print("=" * 60)
 
     infer_graph = tf.compat.v1.Graph()
     with infer_graph.as_default():
-        # 推理输入：固定 batch_size=1
         inputs = tf.compat.v1.placeholder(
             tf.float32,
-            [model_config['infer_batch_size'], model_config['input_dim']],
-            name="input_tensor",
+            [model_config['infer_batch_size'], input_dim],
+            name="input_features",
         )
 
         output, routing_indices, routing_weights, routing_probs = \
-            build_moe_graph(inputs, model_config)
+            build_moe_graph(inputs, model_config, registry)
 
         init_op = tf.compat.v1.global_variables_initializer()
 
@@ -147,8 +152,7 @@ def export_inference_pb(trained_vars, model_config, output_config):
 
     # 验证推理图
     print("[Export] 验证推理图 ...")
-    test_input = np.random.randn(model_config['infer_batch_size'],
-                                  model_config['input_dim']).astype(np.float32)
+    test_input = np.random.randn(model_config['infer_batch_size'], input_dim).astype(np.float32)
     out_val, idx_val, w_val = sess.run(
         [output, routing_indices, routing_weights],
         feed_dict={inputs: test_input},
@@ -174,14 +178,14 @@ def export_inference_pb(trained_vars, model_config, output_config):
     print(f"\n[Export] frozen pb 已保存: {pb_path} ({size_kb:.1f} KB)")
     print(f"[Export] 冻结后节点数: {len(frozen_def.node)}")
 
-    # 打印 ATC 编译参考信息
-    print("\n[ATC 编译命令参考]")
+    # ATC 编译参考
+    print(f"\n[ATC 编译命令参考]")
     print(f"atc \\")
     print(f"  --model={pb_path} \\")
     print(f"  --framework=3 \\")
     print(f"  --output={os.path.splitext(pb_path)[0]} \\")
     print(f"  --input_shape=\"{output_config['input_node']}:"
-          f"{model_config['infer_batch_size']},{model_config['input_dim']}\" \\")
+          f"{model_config['infer_batch_size']},{input_dim}\" \\")
     print(f"  --input_format=ND \\")
     print(f"  --output_type=FP32 \\")
     out_str = ";".join(output_config['output_nodes'])
@@ -194,7 +198,18 @@ def export_inference_pb(trained_vars, model_config, output_config):
 
 
 if __name__ == "__main__":
-    trained_vars = train(MODEL_CONFIG, TRAIN_CONFIG)
-    pb_path = export_inference_pb(trained_vars, MODEL_CONFIG, OUTPUT_CONFIG)
+    # 示例：使用默认专家
+    registry = ExpertRegistry(MODEL_CONFIG['num_experts'])
+    set_registry(registry)
+
+    # 可选：注册 PyTorch 转换的自定义专家
+    # from pytorch_to_tf import create_expert_builder_from_pytorch
+    # builder, _ = create_expert_builder_from_pytorch("my_model.pth")
+    # registry.register(0, builder)
+
+    print(f"[专家注册表]\n{registry.summary()}\n")
+
+    trained_vars = train(MODEL_CONFIG, TRAIN_CONFIG, registry)
+    pb_path = export_inference_pb(trained_vars, MODEL_CONFIG, OUTPUT_CONFIG, registry)
     print(f"\n[Done] pb 文件: {pb_path}")
     print("运行 python verify_pb.py 验证模型。")
