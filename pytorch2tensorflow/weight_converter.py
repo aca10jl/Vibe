@@ -42,6 +42,14 @@ class WeightConverter:
         "running_var": "moving_variance",
     }
 
+    # BatchNorm uses gamma/beta instead of kernel/bias in TF
+    BN_NAME_MAP = {
+        "weight": "gamma",
+        "bias": "beta",
+        "running_mean": "moving_mean",
+        "running_var": "moving_variance",
+    }
+
     # Keys to skip (not used in TF)
     SKIP_KEYS = {"num_batches_tracked"}
 
@@ -83,11 +91,26 @@ class WeightConverter:
         # Load PyTorch state dict
         state_dict = self._load_pytorch_checkpoint(pytorch_path)
 
-        # Build name mapping
+        # Try name-based mapping first
         mapping = self._build_name_mapping(state_dict, tf_model, name_mapping)
 
-        # Convert and assign weights
-        stats = self._assign_weights(state_dict, tf_model, mapping)
+        # If name-based mapping found very few matches, fall back to
+        # structural/positional matching
+        matched_count = sum(1 for v in mapping.values() if v is not None)
+        total_mappable = sum(
+            1 for k in state_dict
+            if not any(skip in k for skip in self.SKIP_KEYS)
+        )
+
+        if matched_count < total_mappable * 0.5:
+            logger.info(
+                "Name-based mapping found only %d/%d matches, "
+                "falling back to structural matching",
+                matched_count, total_mappable,
+            )
+            stats = self._assign_weights_structural(state_dict, tf_model)
+        else:
+            stats = self._assign_weights(state_dict, tf_model, mapping)
 
         # Save if requested
         if output_path:
@@ -368,6 +391,172 @@ class WeightConverter:
 
         return stats
 
+    def _assign_weights_structural(
+        self,
+        state_dict: dict,
+        tf_model,
+    ) -> dict:
+        """Assign weights using structural/positional matching.
+
+        This approach matches PyTorch and TF weights by their structural
+        position in the model, rather than by name. Works when the two
+        models have the same architecture but different naming conventions.
+
+        The key insight: both PyTorch and TF iterate weights in the same
+        structural order (layer by layer, weight then bias/BN params).
+        We classify each weight by its role (conv kernel, BN gamma, etc.)
+        and match them positionally.
+        """
+        import tensorflow as tf
+
+        # Classify PT weights into ordered groups
+        pt_weights = []
+        for name, tensor in state_dict.items():
+            if any(skip in name for skip in self.SKIP_KEYS):
+                continue
+            np_array = tensor.cpu().numpy()
+            role = self._classify_weight_role(name, np_array)
+            pt_weights.append((name, np_array, role))
+
+        # Classify TF weights
+        tf_weights = []
+        for w in tf_model.weights:
+            role = self._classify_tf_weight_role(w.name, w.shape)
+            tf_weights.append((w.name, w, role))
+
+        # Match by role sequence: iterate both lists and match
+        # weights that have compatible roles
+        assigned = 0
+        skipped = 0
+        errors = []
+        tf_idx = 0
+
+        for pt_name, np_array, pt_role in pt_weights:
+            # Find next TF weight with compatible role
+            matched = False
+            search_start = tf_idx
+
+            for j in range(search_start, len(tf_weights)):
+                tf_name, tf_var, tf_role = tf_weights[j]
+
+                if not self._roles_compatible(pt_role, tf_role):
+                    continue
+
+                # Apply transpose
+                transpose_rule = self._get_transpose_rule(pt_name, np_array)
+                converted = np.transpose(np_array, transpose_rule) if transpose_rule else np_array
+
+                # Check shape compatibility
+                tf_shape = tuple(tf_var.shape)
+                if converted.shape == tf_shape:
+                    tf_var.assign(converted)
+                    assigned += 1
+                    tf_idx = j + 1
+                    matched = True
+                    self._log(
+                        "assigned", pt_name, tf_name=tf_name,
+                        pt_shape=np_array.shape, tf_shape=tf_shape,
+                        transposed=transpose_rule is not None,
+                        method="structural",
+                    )
+                    break
+                elif np.prod(converted.shape) == np.prod(tf_shape):
+                    # Same total elements, try reshape
+                    converted = converted.reshape(tf_shape)
+                    tf_var.assign(converted)
+                    assigned += 1
+                    tf_idx = j + 1
+                    matched = True
+                    self._log(
+                        "assigned", pt_name, tf_name=tf_name,
+                        pt_shape=np_array.shape, tf_shape=tf_shape,
+                        transposed=True, method="structural+reshape",
+                    )
+                    break
+
+            if not matched:
+                skipped += 1
+                self._log("skip", pt_name, reason=f"no structural match (role={pt_role})")
+
+        stats = {
+            "total_pytorch_weights": len(state_dict),
+            "assigned": assigned,
+            "skipped": skipped,
+            "errors": len(errors),
+            "error_details": errors,
+            "tf_model_weights": len(tf_weights),
+        }
+
+        logger.info(
+            "Structural weight mapping: %d/%d assigned, %d skipped",
+            assigned, len(state_dict), skipped,
+        )
+        return stats
+
+    @staticmethod
+    def _classify_weight_role(name: str, array: np.ndarray) -> str:
+        """Classify a PyTorch weight by its role."""
+        suffix = name.split(".")[-1]
+        name_lower = name.lower()
+
+        if suffix == "weight":
+            if "bn" in name_lower or "batch_norm" in name_lower or "norm" in name_lower:
+                if array.ndim == 1:
+                    return "bn_gamma"
+            if array.ndim == 4:
+                if "transpose" in name_lower:
+                    return "conv_transpose_kernel"
+                return "conv_kernel"
+            if array.ndim == 2:
+                return "dense_kernel"
+            if array.ndim == 3:
+                return "conv1d_kernel"
+            if array.ndim == 1:
+                return "bn_gamma"  # fallback for 1D weight
+        elif suffix == "bias":
+            if "bn" in name_lower or "batch_norm" in name_lower or "norm" in name_lower:
+                return "bn_beta"
+            return "bias"
+        elif suffix == "running_mean":
+            return "bn_moving_mean"
+        elif suffix == "running_var":
+            return "bn_moving_var"
+
+        return f"unknown_{array.ndim}d"
+
+    @staticmethod
+    def _classify_tf_weight_role(name: str, shape) -> str:
+        """Classify a TF weight by its role."""
+        name_lower = name.lower()
+        ndim = len(shape)
+
+        if "gamma" in name_lower:
+            return "bn_gamma"
+        elif "beta" in name_lower:
+            return "bn_beta"
+        elif "moving_mean" in name_lower:
+            return "bn_moving_mean"
+        elif "moving_variance" in name_lower:
+            return "bn_moving_var"
+        elif "kernel" in name_lower:
+            if ndim == 4:
+                if "transpose" in name_lower:
+                    return "conv_transpose_kernel"
+                return "conv_kernel"
+            elif ndim == 3:
+                return "conv1d_kernel"
+            elif ndim == 2:
+                return "dense_kernel"
+        elif "bias" in name_lower:
+            return "bias"
+
+        return f"unknown_{ndim}d"
+
+    @staticmethod
+    def _roles_compatible(pt_role: str, tf_role: str) -> bool:
+        """Check if PT and TF weight roles are compatible."""
+        return pt_role == tf_role
+
     # ────────────────────────────────────────
     # Internal: Transpose rules
     # ────────────────────────────────────────
@@ -412,12 +601,13 @@ class WeightConverter:
     def _save_tf_weights(self, tf_model, output_path: str) -> None:
         """Save TF model weights."""
         path = Path(output_path)
-        if path.suffix == ".h5":
+        if path.suffix in (".h5", ".weights.h5"):
             tf_model.save_weights(str(path))
         else:
-            # Save as TF checkpoint
+            # Save as Keras weights file
             path.mkdir(parents=True, exist_ok=True)
-            tf_model.save_weights(str(path / "weights"))
+            weights_file = path / "weights.weights.h5"
+            tf_model.save_weights(str(weights_file))
         logger.info("Saved TF weights to %s", output_path)
 
     # ────────────────────────────────────────

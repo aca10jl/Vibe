@@ -105,9 +105,12 @@ ACTIVATION_MAP = {
     "F.log_softmax": "tf.nn.log_softmax",
     "F.softplus": "tf.math.softplus",
     "F.silu": "tf.nn.silu",
-    "F.mish": "tf.nn.silu",  # approximate
-    "F.hardswish": "tf.nn.relu6",  # approximate, use custom
+    "F.mish": "tf.keras.activations.mish",
+    "F.hardswish": "tf.keras.activations.hard_swish",
     "F.hardsigmoid": "tf.keras.activations.hard_sigmoid",
+    "F.dropout": "tf.nn.dropout",
+    "F.dropout2d": "tf.nn.dropout",
+    "F.dropout3d": "tf.nn.dropout",
 }
 
 # ─────────────────────────────────────────────
@@ -131,8 +134,14 @@ FUNCTIONAL_MAP = {
     "F.layer_norm": "tf.keras.layers.LayerNormalization",
     "F.group_norm": "tf.keras.layers.GroupNormalization",
     "F.instance_norm": "tfa.layers.InstanceNormalization",
+    # Dropout (functional)
+    "F.dropout": "tf.nn.dropout",
+    "F.dropout2d": "tf.nn.dropout",
+    "F.dropout3d": "tf.nn.dropout",
     # Convolution
+    "F.conv1d": "tf.nn.conv1d",
     "F.conv2d": "tf.nn.conv2d",
+    "F.conv3d": "tf.nn.conv3d",
     "F.conv_transpose2d": "tf.nn.conv2d_transpose",
     # Linear algebra
     "torch.matmul": "tf.matmul",
@@ -283,10 +292,11 @@ WEIGHT_TRANSPOSE_RULES = {
 # ─────────────────────────────────────────────
 
 PADDING_MAP = {
-    "zeros": "zero",
-    "reflect": "reflect",
-    "replicate": "symmetric",
-    "circular": "wrap",  # approximate
+    "zeros": "CONSTANT",
+    "constant": "CONSTANT",
+    "reflect": "REFLECT",
+    "replicate": "SYMMETRIC",
+    "circular": "SYMMETRIC",  # approximate
 }
 
 # ─────────────────────────────────────────────

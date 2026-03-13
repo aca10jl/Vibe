@@ -315,9 +315,25 @@ class ModelConverter:
             source = re.sub(r"\bdim\s*=", "axis=", source)
             return source
 
-        # Handle F.pad
+        # Handle F.pad — requires padding format conversion
         if pt_func == "F.pad":
             source = self._convert_pad(source)
+            return source
+
+        # Handle F.dropout — parameter adaptation
+        if pt_func.startswith("F.dropout"):
+            source = self._convert_dropout(source, pt_func)
+            return source
+
+        # Handle torch.cat — needs dim→axis
+        if pt_func == "torch.cat":
+            source = source.replace("torch.cat", "tf.concat")
+            source = re.sub(r"\bdim\s*=", "axis=", source)
+            return source
+
+        # Handle F.interpolate variants
+        if pt_func in ("F.upsample", "F.upsample_nearest", "F.upsample_bilinear"):
+            source = self._convert_interpolate(source)
             return source
 
         # Generic replacement
@@ -329,26 +345,127 @@ class ModelConverter:
         return source
 
     def _convert_interpolate(self, source: str) -> str:
-        """Convert F.interpolate to tf.image.resize."""
-        # Simple replacement - detailed param conversion
-        pattern = r"F\.interpolate\s*\("
-        source = re.sub(pattern, "tf.image.resize(", source)
-        # scale_factor → approximate with size
-        source = re.sub(r"\bscale_factor\s*=", "size=", source)
+        """Convert F.interpolate to tf.image.resize.
+
+        PyTorch: F.interpolate(x, size=(H,W), scale_factor=2, mode='bilinear')
+            - Input is NCHW
+        TF: tf.image.resize(x, size=[H,W], method='bilinear')
+            - Input is NHWC
+        """
+        # Handle scale_factor by replacing with a helper expression
+        # scale_factor=N → size=tf.shape(x)[1:3]*N  (for NHWC spatial dims)
+        pattern = r"F\.interpolate\s*\(\s*(\w+)\s*,\s*scale_factor\s*=\s*(\w+)"
+
+        def _replace_scale_factor(match: re.Match) -> str:
+            tensor = match.group(1)
+            factor = match.group(2)
+            return (
+                f"tf.image.resize({tensor}, "
+                f"size=[tf.shape({tensor})[1] * {factor}, "
+                f"tf.shape({tensor})[2] * {factor}]"
+            )
+
+        source = re.sub(pattern, _replace_scale_factor, source)
+
+        # Handle size= parameter (already absolute sizes)
+        source = re.sub(r"F\.interpolate\s*\(", "tf.image.resize(", source)
+        source = re.sub(r"F\.upsample\s*\(", "tf.image.resize(", source)
+
         # mode → method
         for pt_mode, tf_mode in INTERPOLATION_MAP.items():
             source = source.replace(f"mode='{pt_mode}'", f"method='{tf_mode}'")
             source = source.replace(f'mode="{pt_mode}"', f"method='{tf_mode}'")
-        # align_corners
+
+        # align_corners — not supported in TF, remove
         source = re.sub(r",?\s*align_corners\s*=\s*(True|False)", "", source)
         return source
 
     def _convert_pad(self, source: str) -> str:
-        """Convert F.pad to tf.pad."""
-        source = source.replace("F.pad", "tf.pad")
-        for pt_mode, tf_mode in PADDING_MAP.items():
-            source = source.replace(f"mode='{pt_mode}'", f"mode='{tf_mode.upper()}'")
-            source = source.replace(f'mode="{pt_mode}"', f"mode='{tf_mode.upper()}'")
+        """Convert F.pad to tf.pad.
+
+        PyTorch F.pad uses a flat tuple in reverse order:
+            F.pad(x, (left, right, top, bottom), mode='reflect')
+        TensorFlow tf.pad uses nested paddings for each dimension (NHWC):
+            tf.pad(x, [[0,0], [top,bottom], [left,right], [0,0]], mode='REFLECT')
+        """
+        # Match F.pad calls with their full arguments
+        pattern = r"F\.pad\s*\(\s*(\w+)\s*,\s*\(([^)]*)\)(?:\s*,\s*([^)]*))?\)"
+
+        def _replace_pad(match: re.Match) -> str:
+            tensor_name = match.group(1)
+            pad_values_str = match.group(2)
+            extra_args = match.group(3) or ""
+
+            # Parse padding values
+            pad_values = [v.strip() for v in pad_values_str.split(",") if v.strip()]
+
+            # Build TF paddings in NHWC format
+            # PyTorch pad order: (left, right, top, bottom[, front, back])
+            # from innermost dim to outermost dim
+            if len(pad_values) == 2:
+                # 1D: (left, right) → pad last dim (W in NHWC)
+                paddings = f"[[0, 0], [0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}]]"
+            elif len(pad_values) == 4:
+                # 2D: (left, right, top, bottom) → pad H and W dims in NHWC
+                left, right, top, bottom = pad_values
+                paddings = f"[[0, 0], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
+            elif len(pad_values) == 6:
+                # 3D: (left, right, top, bottom, front, back)
+                left, right, top, bottom, front, back = pad_values
+                paddings = f"[[0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
+            else:
+                # Fallback: keep as expression (may be dynamic)
+                paddings = f"({pad_values_str})"
+
+            # Parse mode and value from extra args
+            mode = "CONSTANT"
+            constant_values = ""
+            if extra_args:
+                # Extract mode
+                mode_match = re.search(r"""mode\s*=\s*['"](\w+)['"]""", extra_args)
+                if mode_match:
+                    pt_mode = mode_match.group(1)
+                    mode = PADDING_MAP.get(pt_mode, pt_mode.upper())
+
+                # Extract value (for constant padding)
+                val_match = re.search(r"value\s*=\s*([^,)]+)", extra_args)
+                if val_match and mode == "CONSTANT":
+                    constant_values = f", constant_values={val_match.group(1).strip()}"
+
+            return f"tf.pad({tensor_name}, {paddings}, mode='{mode}'{constant_values})"
+
+        source = re.sub(pattern, _replace_pad, source)
+        return source
+
+    def _convert_dropout(self, source: str, pt_func: str) -> str:
+        """Convert F.dropout to tf.nn.dropout.
+
+        PyTorch: F.dropout(x, p=0.5, training=self.training)
+        TF:      tf.nn.dropout(x, rate=0.5) during training, identity otherwise
+        """
+        # Match F.dropout(...) calls
+        pattern = re.escape(pt_func) + r"\s*\(\s*(\w+)\s*,([^)]*)\)"
+
+        def _replace_dropout(match: re.Match) -> str:
+            tensor = match.group(1)
+            args_str = match.group(2)
+
+            # Extract p value
+            p_match = re.search(r"p\s*=\s*([\d.]+)", args_str)
+            p_val = p_match.group(1) if p_match else "0.5"
+
+            # Check for training flag
+            has_training = "training" in args_str
+
+            if has_training:
+                return (
+                    f"tf.nn.dropout({tensor}, rate={p_val}) "
+                    f"if training else {tensor}"
+                )
+            else:
+                return f"tf.nn.dropout({tensor}, rate={p_val})"
+
+        source = re.sub(pattern, _replace_dropout, source)
         return source
 
     # ────────────────────────────────────────
