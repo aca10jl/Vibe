@@ -224,7 +224,36 @@ class ModelConverter:
         return source
 
     def _convert_conv_params(self, source: str, tf_layer: str) -> str:
-        """Convert Conv layer parameters from PyTorch to TF convention."""
+        """Convert Conv layer parameters from PyTorch to TF convention.
+
+        PyTorch Conv: nn.Conv2d(in_channels, out_channels, kernel_size, ...)
+        TF Conv:      tf.keras.layers.Conv2D(filters, kernel_size, ...)
+
+        The first positional arg (in_channels) must be removed since TF
+        infers input channels automatically.
+        """
+        # Remove in_channels (first positional arg) from Conv layer calls.
+        # PyTorch: Conv2d(in_channels, out_channels, ...) — 2 positional args
+        # TF:      Conv2D(filters, ...) — only needs out_channels
+        # Strategy: match calls with >=2 positional args before any keyword arg,
+        # and remove only the first positional arg.
+        conv_layer_pattern = (
+            r"(tf\.keras\.layers\.Conv\w+)"  # layer name
+            r"\(\s*"
+            r"([^,)]+)"                       # first positional arg (in_channels)
+            r"\s*,\s*"
+            r"([^,)=]+)"                      # second positional arg (out_channels) — no '='
+            r"(?=\s*[,)])"                    # must be followed by , or ) — not = (keyword arg)
+        )
+
+        def _drop_first_pos_arg(match: re.Match) -> str:
+            layer = match.group(1)
+            # skip first arg (in_channels), keep second (out_channels)
+            second_arg = match.group(3).strip()
+            return f"{layer}({second_arg}"
+
+        source = re.sub(conv_layer_pattern, _drop_first_pos_arg, source)
+
         # padding='same' / padding='valid' handling
         source = re.sub(r"padding\s*=\s*(\d+)", self._padding_value_to_tf, source)
 
@@ -249,8 +278,27 @@ class ModelConverter:
             return f"padding='same'"
 
     def _convert_batchnorm_params(self, source: str) -> str:
-        """Convert BatchNorm parameters."""
-        # num_features → first positional arg is not needed in TF BN
+        """Convert BatchNorm parameters.
+
+        PyTorch: nn.BatchNorm2d(num_features, eps=..., momentum=...)
+        TF:      tf.keras.layers.BatchNormalization(epsilon=..., momentum=...)
+
+        The num_features positional arg must be removed since TF infers it.
+        """
+        # Remove num_features (first positional arg) from BatchNormalization calls
+        # Match: BatchNormalization(expr) or BatchNormalization(expr, ...)
+        # Handle case where num_features is the only arg
+        source = re.sub(
+            r"(tf\.keras\.layers\.BatchNormalization)\(\s*[^,)]+\s*\)",
+            r"\1()",
+            source,
+        )
+        # Handle case where num_features is followed by keyword args
+        source = re.sub(
+            r"(tf\.keras\.layers\.BatchNormalization)\(\s*[^,)]+\s*,\s*",
+            r"\1(",
+            source,
+        )
         # eps → epsilon
         source = re.sub(r"\beps\s*=", "epsilon=", source)
         # momentum handling: PyTorch default=0.1, TF default=0.99
@@ -664,7 +712,16 @@ class ModelConverter:
     # ────────────────────────────────────────
 
     def _handle_data_format(self, source: str) -> str:
-        """Add comments about data format conversion."""
+        """Handle NCHW → NHWC data format conversion.
+
+        PyTorch uses NCHW (batch, channels, height, width).
+        TensorFlow uses NHWC (batch, height, width, channels).
+
+        This affects:
+        - Concat/stack axis: dim=1 (channels in NCHW) → axis=-1 (channels in NHWC)
+        - Shape indexing: shape[1]=C, shape[2]=H, shape[3]=W (NCHW)
+                        → shape[1]=H, shape[2]=W, shape[3]=C (NHWC)
+        """
         if self.add_channel_convert:
             # Add note about data format
             if "Conv2D" in source or "Conv2d" in source:
@@ -680,6 +737,24 @@ class ModelConverter:
                 if import_end >= 0:
                     line_end = source.index("\n", import_end)
                     source = source[: line_end + 1] + header + source[line_end + 1 :]
+
+            # Convert channel-axis references from NCHW dim=1 to NHWC axis=-1
+            # tf.concat(..., axis=1) → tf.concat(..., axis=-1)
+            source = re.sub(
+                r"(tf\.concat\s*\([^)]*),\s*axis\s*=\s*1\s*\)",
+                r"\1, axis=-1)",
+                source,
+            )
+
+            # Convert NCHW shape indexing to NHWC:
+            # .shape[2] (H in NCHW) → .shape[1] (H in NHWC)
+            # .shape[3] (W in NCHW) → .shape[2] (W in NHWC)
+            # Use placeholders to avoid double-conversion (e.g. [3]→[2]→[1])
+            source = re.sub(r"\.shape\[3\]", ".shape[__NHWC_2__]", source)
+            source = re.sub(r"\.shape\[2\]", ".shape[__NHWC_1__]", source)
+            source = source.replace("__NHWC_2__", "2")
+            source = source.replace("__NHWC_1__", "1")
+
         return source
 
     def _add_channel_conversion_helpers(self, source: str) -> str:

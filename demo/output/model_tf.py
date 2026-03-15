@@ -20,10 +20,10 @@ class DoubleConv(tf.keras.Model):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv1 = tf.keras.layers.Conv2D(in_channels, out_channels, kernel_size=3, padding='same', use_bias=False)
-        self.bn1 = tf.keras.layers.BatchNormalization(out_channels)
-        self.conv2 = tf.keras.layers.Conv2D(out_channels, out_channels, kernel_size=3, padding='same', use_bias=False)
-        self.bn2 = tf.keras.layers.BatchNormalization(out_channels)
+        self.conv1 = tf.keras.layers.Conv2D(out_channels, kernel_size=3, padding='same', use_bias=False)
+        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.conv2 = tf.keras.layers.Conv2D(out_channels, kernel_size=3, padding='same', use_bias=False)
+        self.bn2 = tf.keras.layers.BatchNormalization()
 
     def call(self, x, training=False):
         x = tf.nn.relu(self.bn1(self.conv1(x)))
@@ -50,18 +50,18 @@ class Up(tf.keras.Model):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.up = tf.keras.layers.Conv2DTranspose(in_channels, in_channels // 2, kernel_size=2, strides=2)
+        self.up = tf.keras.layers.Conv2DTranspose(in_channels // 2, kernel_size=2, strides=2)
         self.conv = DoubleConv(in_channels, out_channels)
 
     def call(self, x1, x2, training=False):
         x1 = self.up(x1)
 
         # Pad x1 to match x2 spatial dimensions if needed
-        diff_y = x2.shape[2] - x1.shape[2]
-        diff_x = x2.shape[3] - x1.shape[3]
+        diff_y = x2.shape[1] - x1.shape[1]
+        diff_x = x2.shape[2] - x1.shape[2]
         x1 = tf.pad(x1, [[0, 0], [diff_y // 2, diff_y - diff_y // 2], [diff_x // 2, diff_x - diff_x // 2], [0, 0]], mode='CONSTANT')
 
-        x = tf.concat([x2, x1], axis=1)
+        x = tf.concat([x2, x1], axis=-1)
         x = self.conv(x)
         return x
 
@@ -92,7 +92,7 @@ class UNet(tf.keras.Model):
         self.up4 = Up(base_features * 2, base_features)
 
         # Output
-        self.outc = tf.keras.layers.Conv2D(base_features, num_classes, kernel_size=1)
+        self.outc = tf.keras.layers.Conv2D(num_classes, kernel_size=1)
 
     def call(self, x, training=False):
         # Encoder path
