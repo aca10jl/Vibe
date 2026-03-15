@@ -32,13 +32,23 @@ from pytorch2tensorflow.layer_mapping import (
 class ModelConverter:
     """Convert PyTorch model .py files to TensorFlow/Keras equivalents."""
 
-    def __init__(self, add_channel_convert: bool = True):
+    def __init__(
+        self,
+        add_channel_convert: bool = True,
+        channels_first: bool = False,
+    ):
         """
         Args:
             add_channel_convert: If True, insert channel-order permutation
                 (NCHW → NHWC) at input and output of the model.
+            channels_first: If True, keep NCHW data format (matching PyTorch).
+                TF layers will use data_format='channels_first' so that
+                tensor shapes, axis indices, and padding orders remain
+                identical to the original PyTorch model.  When True,
+                add_channel_convert is ignored.
         """
-        self.add_channel_convert = add_channel_convert
+        self.channels_first = channels_first
+        self.add_channel_convert = add_channel_convert and not channels_first
         self._custom_layers_needed: set[str] = set()
 
     # ────────────────────────────────────────
@@ -221,6 +231,21 @@ class ModelConverter:
         if "Linear" in pt_layer:
             source = self._convert_linear_params(source)
 
+        # In channels_first mode, pooling/upsampling layers also need data_format
+        if self.channels_first and ("Pool" in pt_layer or "Upsamp" in pt_layer):
+
+            def _add_pool_data_format(match: re.Match) -> str:
+                call = match.group(1)
+                if "data_format" in call:
+                    return call + ")"
+                return call + ", data_format='channels_first')"
+
+            source = re.sub(
+                r"(" + re.escape(tf_layer) + r"\([^)]*)\)",
+                _add_pool_data_format,
+                source,
+            )
+
         return source
 
     def _convert_conv_params(self, source: str, tf_layer: str) -> str:
@@ -267,7 +292,22 @@ class ModelConverter:
         source = re.sub(r"\bbias\s*=", "use_bias=", source)
 
         # Add data_format for Conv layers
-        # We'll use channels_last (NHWC) which is TF default
+        if self.channels_first:
+            # Insert data_format='channels_first' before the closing paren
+            # Use a function to avoid adding it twice on repeated calls
+            def _add_conv_data_format(match: re.Match) -> str:
+                call = match.group(1)
+                if "data_format" in call:
+                    return call + ")"
+                return call + ", data_format='channels_first')"
+
+            source = re.sub(
+                r"(tf\.keras\.layers\.Conv\w+\([^)]+)\)",
+                _add_conv_data_format,
+                source,
+            )
+        # else: channels_last (NHWC) is the TF default, no explicit param needed
+
         return source
 
     def _padding_value_to_tf(self, match: re.Match) -> str:
@@ -308,6 +348,25 @@ class ModelConverter:
         source = re.sub(r"\baffine\s*=\s*False", "center=False, scale=False", source)
         # track_running_stats not needed in TF
         source = re.sub(r",?\s*track_running_stats\s*=\s*(True|False)", "", source)
+
+        # In channels_first mode, BN axis must be 1 (channel dim in NCHW)
+        # TF default axis=-1 is correct for NHWC, but wrong for NCHW
+        if self.channels_first:
+
+            def _add_bn_axis(match: re.Match) -> str:
+                call = match.group(1)
+                if "axis=" in call:
+                    return call + ")"
+                return call + ", axis=1)"
+
+            source = re.sub(
+                r"(tf\.keras\.layers\.BatchNormalization\([^)]*)\)",
+                _add_bn_axis,
+                source,
+            )
+            # Clean up empty-args case: BatchNormalization(, axis=1) → BatchNormalization(axis=1)
+            source = source.replace("BatchNormalization(, ", "BatchNormalization(")
+
         return source
 
     def _convert_bn_momentum(self, match: re.Match) -> str:
@@ -447,20 +506,34 @@ class ModelConverter:
             # Parse padding values
             pad_values = [v.strip() for v in pad_values_str.split(",") if v.strip()]
 
-            # Build TF paddings in NHWC format
+            # Build TF paddings — format depends on channels_first setting.
             # PyTorch pad order: (left, right, top, bottom[, front, back])
-            # from innermost dim to outermost dim
+            # from innermost dim to outermost dim.
+            #
+            # NCHW: [batch, channels, height, width]
+            # NHWC: [batch, height, width, channels]
+            use_nchw = self.channels_first
+
             if len(pad_values) == 2:
-                # 1D: (left, right) → pad last dim (W in NHWC)
-                paddings = f"[[0, 0], [0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}]]"
+                # 1D: (left, right) → pad last dim (W)
+                if use_nchw:
+                    paddings = f"[[0, 0], [0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}]]"
+                else:
+                    paddings = f"[[0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}], [0, 0]]"
             elif len(pad_values) == 4:
-                # 2D: (left, right, top, bottom) → pad H and W dims in NHWC
                 left, right, top, bottom = pad_values
-                paddings = f"[[0, 0], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
+                if use_nchw:
+                    # NCHW: [N, C, H, W]
+                    paddings = f"[[0, 0], [0, 0], [{top}, {bottom}], [{left}, {right}]]"
+                else:
+                    # NHWC: [N, H, W, C]
+                    paddings = f"[[0, 0], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
             elif len(pad_values) == 6:
-                # 3D: (left, right, top, bottom, front, back)
                 left, right, top, bottom, front, back = pad_values
-                paddings = f"[[0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
+                if use_nchw:
+                    paddings = f"[[0, 0], [0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}]]"
+                else:
+                    paddings = f"[[0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
             else:
                 # Fallback: keep as expression (may be dynamic)
                 paddings = f"({pad_values_str})"
@@ -717,11 +790,30 @@ class ModelConverter:
         PyTorch uses NCHW (batch, channels, height, width).
         TensorFlow uses NHWC (batch, height, width, channels).
 
-        This affects:
+        When channels_first=True, the model stays in NCHW format so no
+        axis/shape conversion is needed — only a note is added.
+
+        This affects (NHWC mode only):
         - Concat/stack axis: dim=1 (channels in NCHW) → axis=-1 (channels in NHWC)
         - Shape indexing: shape[1]=C, shape[2]=H, shape[3]=W (NCHW)
                         → shape[1]=H, shape[2]=W, shape[3]=C (NHWC)
         """
+        if self.channels_first:
+            # NCHW mode: no axis/shape conversion needed.
+            # Add a note so readers know the model uses channels_first.
+            if "Conv2D" in source or "Conv2d" in source:
+                header = (
+                    "\n# NOTE: This model uses data_format='channels_first' (NCHW),\n"
+                    "# matching the original PyTorch dimension ordering.\n"
+                    "# Input tensors should be in NCHW format "
+                    "(batch, channels, height, width).\n"
+                )
+                import_end = source.rfind("import ")
+                if import_end >= 0:
+                    line_end = source.index("\n", import_end)
+                    source = source[: line_end + 1] + header + source[line_end + 1 :]
+            return source
+
         if self.add_channel_convert:
             # Add note about data format
             if "Conv2D" in source or "Conv2d" in source:

@@ -43,7 +43,10 @@ def cmd_convert_model(args: argparse.Namespace) -> None:
     """Convert PyTorch model .py file to TensorFlow."""
     from pytorch2tensorflow.converter import ModelConverter
 
-    converter = ModelConverter(add_channel_convert=not args.no_channel_convert)
+    converter = ModelConverter(
+        add_channel_convert=not args.no_channel_convert,
+        channels_first=args.channels_first,
+    )
     output = args.output or args.input.replace(".py", "_tf.py")
 
     print(f"Converting model: {args.input} → {output}")
@@ -163,7 +166,8 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
     print("=" * 60)
     print("Step 1: Converting model code...")
     print("=" * 60)
-    model_converter = ModelConverter()
+    channels_first = getattr(args, "channels_first", False)
+    model_converter = ModelConverter(channels_first=channels_first)
     tf_model_path = str(output_dir / "model_tf.py")
     model_converter.convert_file(args.pt_model, tf_model_path)
     print(f"  Model code saved to {tf_model_path}")
@@ -322,6 +326,11 @@ def create_parser() -> argparse.ArgumentParser:
         "--no-channel-convert", action="store_true",
         help="Skip adding channel conversion helpers",
     )
+    p_model.add_argument(
+        "--channels-first", action="store_true",
+        help="Keep NCHW data format (matching PyTorch). Layers will use "
+             "data_format='channels_first' so tensor shapes stay identical.",
+    )
 
     # ── convert-weights ──
     p_weights = subparsers.add_parser("convert-weights", help="Convert .pth weights to TF")
@@ -359,6 +368,10 @@ def create_parser() -> argparse.ArgumentParser:
     p_full.add_argument("--input-shape", nargs="+", required=True, help="Input shapes")
     p_full.add_argument("-o", "--output", help="Output directory")
     p_full.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
+    p_full.add_argument(
+        "--channels-first", action="store_true",
+        help="Keep NCHW data format (matching PyTorch)",
+    )
 
     return parser
 
