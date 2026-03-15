@@ -183,6 +183,16 @@ FUNCTIONAL_MAP = {
     "torch.linspace": "tf.linspace",
     "torch.tensor": "tf.constant",
     "torch.norm": "tf.norm",
+    # Random operations
+    "torch.randn": "tf.random.normal",
+    "torch.rand": "tf.random.uniform",
+    "torch.randint": "tf.random.uniform",  # needs dtype=tf.int32
+    "torch.randn_like": "tf.random.normal",  # needs shape=tf.shape(x)
+    "torch.rand_like": "tf.random.uniform",  # needs shape=tf.shape(x)
+    "torch.normal": "tf.random.normal",
+    # Seed / device
+    "torch.manual_seed": "tf.random.set_seed",
+    "torch.from_numpy": "tf.constant",
     # Comparison
     "torch.eq": "tf.equal",
     "torch.ne": "tf.not_equal",
@@ -238,6 +248,9 @@ TENSOR_METHOD_MAP = {
     ".zero_()": "tf.zeros_like(",
     ".clone()": "tf.identity(",
     ".numpy()": ".numpy()",
+    ".numel()": "tf.size(",
+    ".parameters()": ".trainable_variables",
+    ".state_dict()": ".get_weights()",
 }
 
 # ─────────────────────────────────────────────

@@ -115,11 +115,11 @@ class UNet(tf.keras.Model):
 
 if __name__ == "__main__":
     model = UNet(in_channels=3, num_classes=2, base_features=32)
-    x = torch.randn(1, 3, 256, 256)
+    x = tf.random.normal((1, 256, 256, 3))
     y = model(x)
     print(f"Input shape:  {x.shape}")
     print(f"Output shape: {y.shape}")
-    print(f"Parameters:   {sum(p.numel() for p in model.parameters()):,}")
+    print(f"Parameters:   {sum(tf.size(v).numpy() for v in model.trainable_variables):,}")
 
 
 def nchw_to_nhwc(x):

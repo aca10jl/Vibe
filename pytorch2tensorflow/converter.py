@@ -594,6 +594,27 @@ class ModelConverter:
         source = re.sub(r"(\w+)\.cuda\([^)]*\)", r"\1", source)
         source = re.sub(r"(\w+)\.cpu\(\)", r"\1", source)
 
+        # .numel() → tf.size(x)
+        source = re.sub(
+            r"(\w+)\.numel\(\)",
+            r"tf.size(\1)",
+            source,
+        )
+
+        # model.parameters() → model.trainable_variables
+        source = re.sub(
+            r"(\w+)\.parameters\(\)",
+            r"\1.trainable_variables",
+            source,
+        )
+
+        # .state_dict() → .get_weights() (approximate)
+        source = re.sub(
+            r"(\w+)\.state_dict\(\)",
+            r"\1.get_weights()",
+            source,
+        )
+
         return source
 
     # ────────────────────────────────────────
@@ -766,6 +787,29 @@ class ReflectionPadding2D(tf.keras.layers.Layer):
 
         # Remove leftover torch references (best effort)
         source = source.replace("torch.device", "'cpu'")
+
+        # Catch-all: flag any remaining torch.xxx calls that slipped through
+        # Convert known stragglers
+        source = source.replace("torch.save", "# torch.save  # TODO: use tf.saved_model.save or model.save_weights")
+        source = source.replace("torch.load", "# torch.load  # TODO: use tf.saved_model.load or model.load_weights")
+
+        # Warn about any remaining torch.* references (excluding comments)
+        lines = source.split("\n")
+        new_lines = []
+        for line in lines:
+            stripped = line.lstrip()
+            # Skip lines that are already comments
+            if stripped.startswith("#"):
+                new_lines.append(line)
+                continue
+            # Check for remaining torch references in code (not in strings/comments)
+            code_part = line.split("#")[0]  # ignore inline comments
+            if re.search(r"\btorch\.\w+", code_part):
+                # Add a warning comment
+                new_lines.append(f"{line}  # WARNING: unconverted torch reference")
+            else:
+                new_lines.append(line)
+        source = "\n".join(new_lines)
 
         # Ensure file ends with newline
         if not source.endswith("\n"):
