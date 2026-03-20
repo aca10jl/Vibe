@@ -1,0 +1,52 @@
+============================================================
+SEMICONDUCTOR YIELD ROOT CAUSE ANALYSIS REPORT
+============================================================
+
+Lot Size: 25 wafers
+Lot Average Yield: 86.4%
+
+[Finding 1] Yield Loss Pattern: Edge Effect
+  - Yield loss is concentrated at wafer edge (>70% radius)
+  - Center yield ~95%, Edge yield drops to ~60-80%
+  - Pattern is consistent across all wafers in the lot
+
+[Finding 2] WAT Parameter Drift at Edge
+  - bin: Edge vs Center diff = -21.4% (p=0.000000)
+  - Vth_V: Edge vs Center diff = 1.4% (p=0.000000)
+  - Idsat_uA: Edge vs Center diff = -1.4% (p=0.000000)
+  - Rs_ohm_sq: Edge vs Center diff = 1.6% (p=0.000000)
+  - pattern_defect_count: Edge vs Center diff = 824.1% (p=0.000000)
+
+[Finding 3] Pattern Defect Concentration at Edge
+  - Pattern defect count increases dramatically at edge region
+  - Strong negative correlation between pattern defects and yield
+  - Particle and scratch defects show NO edge concentration
+
+[Finding 4] SPC Alarm on Lithography Equipment
+  - 0 SPC OOC alarms on LITHO-01
+  - CD and Overlay parameters show drift trend from Wafer #10
+  - Equipment: LITHO-01 (Lithography Scanner)
+
+[Finding 5] High Correlation between Defect Map and Yield Map
+  - Average Yield-Defect spatial correlation: -0.228
+  - Pattern defect distribution matches yield loss pattern
+
+============================================================
+CONCLUSION: ROOT CAUSE IDENTIFIED
+============================================================
+
+Root Cause: Lithography edge exposure non-uniformity (LITHO-01)
+
+Evidence Chain:
+  1. Yield loss concentrated at wafer edge -> Edge effect
+  2. Pattern defects concentrated at edge -> Lithography related
+  3. WAT parameters (Vth, Rs) drift at edge -> Process variation
+  4. SPC shows LITHO-01 CD/Overlay drift -> Equipment issue
+  5. Defect map highly correlated with yield map -> Confirmed link
+
+Recommended Actions:
+  1. Check LITHO-01 edge exposure dose uniformity
+  2. Verify lens aberration and focus at wafer edge
+  3. Review LITHO-01 PM (Preventive Maintenance) records
+  4. Consider edge exposure compensation recipe adjustment
+  5. Run qualification wafer after adjustment

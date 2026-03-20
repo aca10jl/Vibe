@@ -1,0 +1,6 @@
+parameter,center_mean,center_std,edge_mean,edge_std,diff_pct,t_statistic,p_value,significant
+bin,0.942,0.2342,0.74,0.4394,-21.44,6.962,0.0,True
+Vth_V,0.4506,0.0083,0.4568,0.0083,1.38,-9.1193,0.0,True
+Idsat_uA,800.8323,15.9721,789.2463,16.4531,-1.45,8.6981,0.0,True
+Rs_ohm_sq,149.9899,3.2018,152.3313,3.1594,1.56,-8.963,0.0,True
+pattern_defect_count,0.0887,0.2849,0.82,1.0947,824.08,-11.0743,0.0,True
