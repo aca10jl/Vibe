@@ -1,0 +1,6 @@
+alarm_id,wafer_id,alarm_type,parameter,value,spec_limit,severity,equipment,step
+1,3,YIELD_LOW,Bin1_Yield,0.805,>= 0.90,CRITICAL,LITHO-01,Final_Test
+2,7,YIELD_LOW,Bin1_Yield,0.791,>= 0.90,CRITICAL,LITHO-01,Final_Test
+3,12,YIELD_LOW,Bin1_Yield,0.793,>= 0.90,CRITICAL,LITHO-01,Final_Test
+4,18,YIELD_LOW,Bin1_Yield,0.828,>= 0.90,CRITICAL,LITHO-01,Final_Test
+5,22,YIELD_LOW,Bin1_Yield,0.807,>= 0.90,CRITICAL,LITHO-01,Final_Test
