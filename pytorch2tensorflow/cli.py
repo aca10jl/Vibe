@@ -151,6 +151,30 @@ def cmd_export(args: argparse.Namespace) -> None:
             print(f"  - {w}")
 
 
+def cmd_auto(args: argparse.Namespace) -> None:
+    """One-click auto-conversion pipeline."""
+    from pytorch2tensorflow.auto_convert import auto_convert
+
+    input_shapes = None
+    if args.input_shape:
+        input_shapes = [
+            tuple(int(d) for d in s.split(",")) for s in args.input_shape
+        ]
+
+    result = auto_convert(
+        pt_model_path=args.pt_model,
+        pt_weights_path=args.pt_weights,
+        input_shapes=input_shapes,
+        output_dir=args.output or "conversion_output",
+        channels_first=getattr(args, "channels_first", False),
+        soc_version=args.soc_version,
+        verbose=True,
+    )
+
+    if not result.success:
+        sys.exit(1)
+
+
 def cmd_full_pipeline(args: argparse.Namespace) -> None:
     """Run the complete conversion pipeline."""
     from pytorch2tensorflow.converter import ModelConverter
@@ -361,6 +385,20 @@ def create_parser() -> argparse.ArgumentParser:
     p_export.add_argument("-o", "--output", help="Output directory")
     p_export.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
 
+    # ── auto ──
+    p_auto = subparsers.add_parser(
+        "auto", help="One-click auto-conversion (auto-detect inputs/outputs)"
+    )
+    p_auto.add_argument("--pt-model", required=True, help="PyTorch model .py path")
+    p_auto.add_argument("--pt-weights", help="PyTorch weights .pth path (optional)")
+    p_auto.add_argument("--input-shape", nargs="+", help="Input shapes (e.g., 3,224,224). Auto-detected if omitted.")
+    p_auto.add_argument("-o", "--output", help="Output directory")
+    p_auto.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
+    p_auto.add_argument(
+        "--channels-first", action="store_true",
+        help="Keep NCHW data format (matching PyTorch)",
+    )
+
     # ── full ──
     p_full = subparsers.add_parser("full", help="Run complete conversion pipeline")
     p_full.add_argument("--pt-model", required=True, help="PyTorch model .py path")
@@ -386,6 +424,7 @@ def main() -> None:
         sys.exit(1)
 
     commands = {
+        "auto": cmd_auto,
         "convert-model": cmd_convert_model,
         "convert-weights": cmd_convert_weights,
         "validate": cmd_validate,

@@ -18,20 +18,53 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Ops known to be supported on Ascend 310/910 platforms
+# Ops known to be supported on Ascend 310/910 platforms.
+# This list covers the standard TF ops produced by our converter.
 ASCEND_SUPPORTED_OPS = {
-    "Conv2D", "DepthwiseConv2dNative", "MatMul", "BiasAdd",
+    # Convolution
+    "Conv2D", "Conv2DBackpropInput", "Conv3D",
+    "DepthwiseConv2dNative",
+    # Matrix / Linear
+    "MatMul", "BatchMatMulV2", "BiasAdd",
+    # Activation
     "Relu", "Relu6", "LeakyRelu", "Sigmoid", "Tanh", "Softmax",
-    "MaxPool", "AvgPool", "Mean", "Add", "Mul", "Sub",
-    "ConcatV2", "Reshape", "Transpose", "Pad", "StridedSlice",
-    "FusedBatchNormV3", "FusedBatchNorm",
-    "ResizeBilinear", "ResizeNearestNeighbor",
-    "Placeholder", "Identity", "Const", "Shape", "Pack",
+    "Elu", "Selu", "LogSoftmax",
+    # Pooling
+    "MaxPool", "AvgPool", "MaxPoolV2",
+    "MaxPool3D", "AvgPool3D",
+    # Reduction
+    "Mean", "Sum", "Max", "Min", "Prod", "All", "Any",
+    # Elementwise arithmetic
+    "Add", "AddV2", "Mul", "Sub", "Neg", "RealDiv", "FloorDiv",
+    "Rsqrt", "Sqrt", "Exp", "Log", "Pow", "Abs", "Square",
+    "Minimum", "Maximum",
+    # Comparison
+    "Greater", "GreaterEqual", "Less", "LessEqual",
+    "Equal", "NotEqual", "Where", "Select",
+    # Shape / Layout
+    "ConcatV2", "Reshape", "Transpose", "Pad", "PadV2", "MirrorPad",
+    "StridedSlice", "Slice", "Split", "SplitV",
     "Squeeze", "ExpandDims", "Fill", "Tile", "Cast",
-    "Greater", "Less", "Equal", "Where", "Select",
-    "RealDiv", "Rsqrt", "Sqrt", "Exp", "Log",
-    "Sum", "Max", "Min", "Prod",
-    "GatherV2", "SpaceToBatchND", "BatchToSpaceND",
+    "Shape", "Pack", "Unpack", "Range",
+    "GatherV2", "GatherNd", "ScatterNd",
+    "SpaceToBatchND", "BatchToSpaceND",
+    "SpaceToDepth", "DepthToSpace",
+    # Normalization
+    "FusedBatchNormV3", "FusedBatchNorm",
+    # Resize / Interpolation
+    "ResizeBilinear", "ResizeNearestNeighbor", "ResizeBicubic",
+    # Framework primitives
+    "Placeholder", "Identity", "Const",
+    "ReadVariableOp", "AssignVariableOp", "VarHandleOp",
+    "NoOp", "Snapshot",
+    # Control flow (basic)
+    "StopGradient",
+    # Random (for inference with fixed seed)
+    "RandomUniform", "RandomStandardNormal",
+    # Misc supported ops
+    "OneHot", "TopKV2", "ArgMax", "ArgMin",
+    "BroadcastTo", "ZerosLike", "OnesLike",
+    "ClipByValue",
 }
 
 # Ops that may cause issues on Ascend
@@ -51,16 +84,20 @@ class PBExporter:
         input_names: Optional[list[str]] = None,
         output_names: Optional[list[str]] = None,
         opset_version: int = 11,
+        channels_first: bool = False,
     ):
         """
         Args:
             input_names: Names of input nodes. Auto-detected if None.
             output_names: Names of output nodes. Auto-detected if None.
             opset_version: ONNX opset version (for optional ONNX export).
+            channels_first: If True, model uses NCHW format; affects ATC
+                input_format and shape generation.
         """
         self.input_names = input_names
         self.output_names = output_names
         self.opset_version = opset_version
+        self.channels_first = channels_first
 
     # ────────────────────────────────────────
     # Public API
@@ -354,22 +391,31 @@ class PBExporter:
         # Check Ascend compatibility
         compat = self.check_ascend_compatibility(pb_path=pb_path)
 
-        # Generate ATC command
-        # Build input shape string
-        nhwc_shapes = []
-        for shape in input_shapes:
-            if len(shape) == 3:
-                # CHW → HWC
-                nhwc_shapes.append(f"1,{shape[1]},{shape[2]},{shape[0]}")
-            else:
-                nhwc_shapes.append(",".join(str(d) for d in (1, *shape)))
+        # Auto-detect input node names from frozen graph
+        input_node_names = self._detect_input_names(pb_path)
 
-        input_shape_str = ";".join(nhwc_shapes)
+        # Generate ATC command with correct input shapes
+        input_format = "NCHW" if self.channels_first else "NHWC"
+        shape_parts = []
+        for idx, shape in enumerate(input_shapes):
+            name = input_node_names[idx] if idx < len(input_node_names) else f"input_{idx}"
+            if self.channels_first:
+                # Keep NCHW as-is
+                shape_str = ",".join(str(d) for d in (1, *shape))
+            elif len(shape) == 3:
+                # CHW → HWC for NHWC mode
+                shape_str = f"1,{shape[1]},{shape[2]},{shape[0]}"
+            else:
+                shape_str = ",".join(str(d) for d in (1, *shape))
+            shape_parts.append(f"{name}:{shape_str}")
+
+        atc_input_shape = ";".join(shape_parts)
         atc_cmd = self.generate_atc_command(
             pb_path=pb_path,
             output_path=str(out_path / "model"),
             soc_version=soc_version,
-            input_shape=f"input:{input_shape_str}",
+            input_shape=atc_input_shape,
+            input_format=input_format,
         )
 
         return {
@@ -377,4 +423,27 @@ class PBExporter:
             "frozen_graph_path": pb_path,
             "ascend_compatibility": compat,
             "atc_command": atc_cmd,
+            "input_nodes": input_node_names,
         }
+
+    def _detect_input_names(self, pb_path: str) -> list[str]:
+        """Auto-detect input node names from a frozen graph.
+
+        Finds Placeholder nodes which represent model inputs.
+        """
+        import tensorflow as tf
+
+        graph_def = tf.compat.v1.GraphDef()
+        with open(pb_path, "rb") as f:
+            graph_def.ParseFromString(f.read())
+
+        input_names = []
+        for node in graph_def.node:
+            if node.op == "Placeholder":
+                input_names.append(node.name)
+
+        if not input_names:
+            input_names = ["input"]
+            logger.warning("No Placeholder nodes found, defaulting to 'input'")
+
+        return input_names

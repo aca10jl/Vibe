@@ -210,9 +210,51 @@ class ModelConverter:
         return source
 
     def _convert_nn_sequential(self, source: str) -> str:
-        """Convert nn.Sequential blocks to tf.keras.Sequential."""
+        """Convert nn.Sequential blocks to tf.keras.Sequential.
+
+        PyTorch: nn.Sequential(layer1, layer2, ...)  — positional args
+        TF:      tf.keras.Sequential([layer1, layer2, ...])  — list arg
+
+        Must wrap arguments in [...] brackets.
+        """
+        # First replace the name
         source = source.replace("nn.Sequential", "tf.keras.Sequential")
-        return source
+
+        # Then wrap args in a list: Sequential(...) → Sequential([...])
+        # Use a function to find matching parens (handles nested calls).
+        result = []
+        i = 0
+        marker = "tf.keras.Sequential("
+        while i < len(source):
+            pos = source.find(marker, i)
+            if pos == -1:
+                result.append(source[i:])
+                break
+            # Copy text up to and including the marker
+            result.append(source[i : pos + len(marker)])
+            # Find the matching closing paren
+            depth = 1
+            j = pos + len(marker)
+            while j < len(source) and depth > 0:
+                if source[j] == "(":
+                    depth += 1
+                elif source[j] == ")":
+                    depth -= 1
+                j += 1
+            # j now points one past the closing ')'
+            inner = source[pos + len(marker) : j - 1]  # content between ( and )
+            # Only wrap if inner is non-empty and not already a list
+            stripped_inner = inner.strip()
+            if stripped_inner and not stripped_inner.startswith("["):
+                result.append("[")
+                result.append(inner)
+                result.append("])")
+            else:
+                result.append(inner)
+                result.append(")")
+            i = j
+
+        return "".join(result)
 
     def _convert_layer_call(self, source: str, pt_layer: str, tf_layer: str) -> str:
         """Convert a specific layer constructor call."""
@@ -230,6 +272,8 @@ class ModelConverter:
             source = self._convert_batchnorm_params(source)
         if "Linear" in pt_layer:
             source = self._convert_linear_params(source)
+        if "AdaptiveAvgPool" in pt_layer or "AdaptiveMaxPool" in pt_layer:
+            source = self._convert_adaptive_pool_params(source, tf_layer)
 
         # In channels_first mode, pooling/upsampling layers also need data_format
         if self.channels_first and ("Pool" in pt_layer or "Upsamp" in pt_layer):
@@ -279,17 +323,23 @@ class ModelConverter:
 
         source = re.sub(conv_layer_pattern, _drop_first_pos_arg, source)
 
-        # padding='same' / padding='valid' handling
-        source = re.sub(r"padding\s*=\s*(\d+)", self._padding_value_to_tf, source)
-
-        # stride → strides
-        source = re.sub(r"\bstride\s*=", "strides=", source)
-
-        # dilation → dilation_rate
-        source = re.sub(r"\bdilation\s*=", "dilation_rate=", source)
-
-        # bias → use_bias
-        source = re.sub(r"\bbias\s*=", "use_bias=", source)
+        # Rename Conv keyword args, but ONLY inside tf.keras.layers.XXX(...) calls.
+        # Using a callback to avoid renaming identically-named function parameters
+        # (e.g. `def __init__(self, ..., stride=1)` must NOT become `strides=1`).
+        conv_call_re = r"(tf\.keras\.layers\.\w+\([^)]*)"
+        keyword_renames = [
+            (r"\bpadding\s*=\s*(\d+)", self._padding_value_to_tf),
+            (r"\bstride\s*=", "strides="),
+            (r"\bdilation\s*=", "dilation_rate="),
+            (r"\bbias\s*=", "use_bias="),
+        ]
+        for kw_pattern, replacement in keyword_renames:
+            def _rename_in_call(match: re.Match, _kw=kw_pattern, _rep=replacement) -> str:
+                call_str = match.group(0)
+                if callable(_rep):
+                    return re.sub(_kw, _rep, call_str)
+                return re.sub(_kw, _rep, call_str)
+            source = re.sub(conv_call_re, _rename_in_call, source)
 
         # Add data_format for Conv layers
         if self.channels_first:
@@ -375,10 +425,73 @@ class ModelConverter:
         return f"momentum={tf_momentum}"
 
     def _convert_linear_params(self, source: str) -> str:
-        """Convert Linear → Dense parameters."""
-        # bias → use_bias
-        source = re.sub(r"\bbias\s*=", "use_bias=", source)
+        """Convert Linear → Dense parameters.
+
+        PyTorch: nn.Linear(in_features, out_features, bias=True)
+        TF:      tf.keras.layers.Dense(units, use_bias=True)
+
+        The in_features (first positional arg) must be removed since TF infers it.
+        """
+        # Remove in_features (first positional arg) from Dense calls.
+        # Match: Dense(expr1, expr2, ...) where expr1 and expr2 are positional
+        linear_pattern = (
+            r"(tf\.keras\.layers\.Dense)"
+            r"\(\s*"
+            r"([^,)]+)"       # first positional arg (in_features)
+            r"\s*,\s*"
+            r"([^,)=]+)"      # second positional arg (out_features) — no '='
+            r"(?=\s*[,)])"    # must be followed by , or )
+        )
+
+        def _drop_in_features(match: re.Match) -> str:
+            layer = match.group(1)
+            out_features = match.group(3).strip()
+            return f"{layer}({out_features}"
+
+        source = re.sub(linear_pattern, _drop_in_features, source)
+
+        # bias → use_bias (scoped to Dense layer calls only)
+        def _rename_bias(match: re.Match) -> str:
+            return re.sub(r"\bbias\s*=", "use_bias=", match.group(0))
+        source = re.sub(r"(tf\.keras\.layers\.Dense\([^)]*)", _rename_bias, source)
         return source
+
+    def _convert_adaptive_pool_params(self, source: str, tf_layer: str) -> str:
+        """Convert AdaptiveAvgPool/AdaptiveMaxPool → GlobalAveragePooling/GlobalMaxPool.
+
+        PyTorch: nn.AdaptiveAvgPool2d((1, 1)) or nn.AdaptiveAvgPool2d(1)
+        TF:      tf.keras.layers.GlobalAveragePooling2D()
+
+        GlobalAveragePooling always pools over all spatial dims, so the
+        output_size argument must be removed entirely.
+        Uses paren-depth matching to handle nested parens like ((1, 1)).
+        """
+        marker = tf_layer + "("
+        result = []
+        i = 0
+        while i < len(source):
+            pos = source.find(marker, i)
+            if pos == -1:
+                result.append(source[i:])
+                break
+            result.append(source[i:pos])
+            # Find the matching closing paren (handles nested parens)
+            depth = 1
+            j = pos + len(marker)
+            while j < len(source) and depth > 0:
+                if source[j] == "(":
+                    depth += 1
+                elif source[j] == ")":
+                    depth -= 1
+                j += 1
+            # Replace with empty args (or data_format for channels_first)
+            if self.channels_first:
+                result.append(f"{tf_layer}(data_format='channels_first')")
+            else:
+                result.append(f"{tf_layer}()")
+            i = j
+
+        return "".join(result)
 
     # ────────────────────────────────────────
     # forward() → call() conversion
@@ -402,9 +515,40 @@ class ModelConverter:
 
     def _convert_functional_ops(self, source: str) -> str:
         """Convert F.xxx functional operations."""
+        # Handle torch.flatten specially before generic replacement
+        source = self._convert_torch_flatten(source)
+
         for pt_func, tf_func in {**FUNCTIONAL_MAP, **ACTIVATION_MAP}.items():
             if pt_func in source:
                 source = self._convert_specific_functional(source, pt_func, tf_func)
+        return source
+
+    def _convert_torch_flatten(self, source: str) -> str:
+        """Convert torch.flatten(x, start_dim) to tf.reshape.
+
+        torch.flatten(x, 1) flattens from dim 1 onwards:
+            → tf.reshape(x, [tf.shape(x)[0], -1])
+        torch.flatten(x, 0) flattens everything:
+            → tf.reshape(x, [-1])
+        torch.flatten(x) defaults to start_dim=0.
+        """
+        # torch.flatten(x, 1) → tf.reshape(x, [tf.shape(x)[0], -1])
+        def _replace_flatten(match: re.Match) -> str:
+            tensor = match.group(1)
+            start_dim = match.group(2).strip() if match.group(2) else "0"
+            if start_dim == "1":
+                return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
+            elif start_dim == "0":
+                return f"tf.reshape({tensor}, [-1])"
+            else:
+                return f"tf.reshape({tensor}, [*tf.shape({tensor})[:{start_dim}], -1])"
+
+        # Match torch.flatten(x, start_dim) or torch.flatten(x)
+        source = re.sub(
+            r"torch\.flatten\s*\(\s*(\w+)\s*(?:,\s*(\d+))?\s*\)",
+            _replace_flatten,
+            source,
+        )
         return source
 
     def _convert_specific_functional(
@@ -633,10 +777,20 @@ class ModelConverter:
             source,
         )
 
-        # .flatten(start) → tf.reshape
+        # .flatten(start_dim) → tf.reshape
+        def _replace_method_flatten(match: re.Match) -> str:
+            tensor = match.group(1)
+            start_dim = match.group(2)
+            if start_dim == "1":
+                return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
+            elif start_dim == "0":
+                return f"tf.reshape({tensor}, [-1])"
+            else:
+                return f"tf.reshape({tensor}, [*tf.shape({tensor})[:{start_dim}], -1])"
+
         source = re.sub(
             r"(\w+)\.flatten\s*\((\d+)\)",
-            r"tf.reshape(\1, [*tf.shape(\1)[:\2], -1])",
+            _replace_method_flatten,
             source,
         )
 

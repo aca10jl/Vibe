@@ -20,12 +20,14 @@ from pytorch2tensorflow.converter import ModelConverter
 from pytorch2tensorflow.weight_converter import WeightConverter
 from pytorch2tensorflow.validator import AccuracyValidator
 from pytorch2tensorflow.exporter import PBExporter
+from pytorch2tensorflow.auto_convert import auto_convert
 
 __all__ = [
     "ModelConverter",
     "WeightConverter",
     "AccuracyValidator",
     "PBExporter",
+    "auto_convert",
     "LAYER_MAP",
     "ACTIVATION_MAP",
 ]
