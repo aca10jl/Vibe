@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="520" viewBox="0 0 1000 520">
+<style>text{font-family:Arial,"Noto Sans SC",sans-serif;} .small{font-size:12px;} .label{font-size:16px;font-weight:700;} .title{font-size:24px;font-weight:700;} .subtitle{font-size:14px;fill:#334155;} </style>
+<rect width="100%" height="100%" fill="#f8fafc"/>
+<text x="28" y="34" class="title" fill="#0f172a">改善前后缺陷构成对比</text>
+<text x="28" y="58" class="subtitle" fill="#0f172a">用于说明智能体如何把零散失效图样归并成可执行的根因优先级。</text>
+<line x1="100" y1="120" x2="100" y2="440" stroke="#475569" stroke-width="2"/>
+<line x1="100" y1="440" x2="900" y2="440" stroke="#475569" stroke-width="2"/>
+<line x1="100" y1="440.0" x2="900" y2="440.0" stroke="#cbd5e1" stroke-width="1"/>
+<text x="56" y="444" class="small" fill="#0f172a">0</text>
+<line x1="100" y1="387.82608695652175" x2="900" y2="387.82608695652175" stroke="#cbd5e1" stroke-width="1"/>
+<text x="56" y="391" class="small" fill="#0f172a">60</text>
+<line x1="100" y1="335.6521739130435" x2="900" y2="335.6521739130435" stroke="#cbd5e1" stroke-width="1"/>
+<text x="56" y="339" class="small" fill="#0f172a">120</text>
+<line x1="100" y1="283.47826086956525" x2="900" y2="283.47826086956525" stroke="#cbd5e1" stroke-width="1"/>
+<text x="56" y="287" class="small" fill="#0f172a">180</text>
+<line x1="100" y1="231.30434782608697" x2="900" y2="231.30434782608697" stroke="#cbd5e1" stroke-width="1"/>
+<text x="56" y="235" class="small" fill="#0f172a">240</text>
+<line x1="100" y1="179.1304347826087" x2="900" y2="179.1304347826087" stroke="#cbd5e1" stroke-width="1"/>
+<text x="56" y="183" class="small" fill="#0f172a">300</text>
+<rect x="160" y="140.0" width="36" height="300.0" fill="#ef4444" rx="4"/>
+<rect x="206" y="419.1304347826087" width="36" height="20.869565217391305" fill="#22c55e" rx="4"/>
+<text x="156" y="470" class="small" fill="#0f172a">边缘环形</text>
+<text x="160" y="132" class="small" fill="#0f172a">345</text>
+<text x="206" y="411" class="small" fill="#0f172a">24</text>
+<rect x="310" y="336.52173913043475" width="36" height="103.47826086956522" fill="#ef4444" rx="4"/>
+<rect x="356" y="427.82608695652175" width="36" height="12.17391304347826" fill="#22c55e" rx="4"/>
+<text x="306" y="470" class="small" fill="#0f172a">右上 cluster</text>
+<text x="310" y="328" class="small" fill="#0f172a">119</text>
+<text x="356" y="419" class="small" fill="#0f172a">14</text>
+<rect x="460" y="381.7391304347826" width="36" height="58.26086956521739" fill="#ef4444" rx="4"/>
+<rect x="506" y="439.1304347826087" width="36" height="0.8695652173913043" fill="#22c55e" rx="4"/>
+<text x="456" y="470" class="small" fill="#0f172a">对角刮伤</text>
+<text x="460" y="373" class="small" fill="#0f172a">67</text>
+<text x="506" y="431" class="small" fill="#0f172a">1</text>
+<rect x="610" y="382.60869565217394" width="36" height="57.391304347826086" fill="#ef4444" rx="4"/>
+<rect x="656" y="439.1304347826087" width="36" height="0.8695652173913043" fill="#22c55e" rx="4"/>
+<text x="606" y="470" class="small" fill="#0f172a">中心热点</text>
+<text x="610" y="374" class="small" fill="#0f172a">66</text>
+<text x="656" y="431" class="small" fill="#0f172a">1</text>
+<rect x="760" y="392.17391304347825" width="36" height="47.826086956521735" fill="#ef4444" rx="4"/>
+<rect x="806" y="420.0" width="36" height="20.0" fill="#22c55e" rx="4"/>
+<text x="756" y="470" class="small" fill="#0f172a">随机失效</text>
+<text x="760" y="384" class="small" fill="#0f172a">55</text>
+<text x="806" y="412" class="small" fill="#0f172a">23</text>
+<rect x="760" y="82" width="18" height="18" fill="#ef4444" rx="3"/>
+<text x="786" y="96" class="small" fill="#0f172a">改善前</text>
+<rect x="840" y="82" width="18" height="18" fill="#22c55e" rx="3"/>
+<text x="866" y="96" class="small" fill="#0f172a">改善后</text>
+</svg>

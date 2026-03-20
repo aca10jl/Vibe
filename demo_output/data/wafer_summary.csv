@@ -1,0 +1,11 @@
+lot,phase,wafer_id,product,tool,chamber,process_step,pattern,root_cause,action,total_die,good_die,yield_pct,edge_ring_fail,cluster_fail,scratch_fail,center_fail,random_fail
+LOT-A,改善前,W01,28nm MCU,ETCH-07,A,Plasma Etch,edge_ring,边缘环形失效，怀疑静电卡盘温控漂移与边缘等离子体不均匀,校准 ESC 温区并复核边缘 gas flow,681,487,71.51,182,0,0,0,12
+LOT-A,改善前,W02,28nm MCU,ETCH-07,A,Plasma Etch,edge_ring,边缘环形失效，怀疑静电卡盘温控漂移与边缘等离子体不均匀,校准 ESC 温区并复核边缘 gas flow,681,512,75.18,163,0,0,0,6
+LOT-A,改善前,W03,28nm MCU,ETCH-07,B,Plasma Etch,top_right_cluster,右上局部簇状失效，怀疑 chamber B 粒子污染,执行 chamber PM 与 particle clean,681,613,90.01,0,59,0,0,9
+LOT-A,改善前,W04,28nm MCU,ETCH-07,B,Plasma Etch,top_right_cluster,右上局部簇状失效，怀疑 chamber B 粒子污染,执行 chamber PM 与 particle clean,681,613,90.01,0,60,0,0,8
+LOT-A,改善前,W05,28nm MCU,CMP-03,-,CMP,scratch_diagonal,对角线刮伤，怀疑机械手搬运路径与 pad condition 异常,检查机械手轨迹并更换 pad,681,604,88.69,0,0,67,0,10
+LOT-A,改善前,W06,28nm MCU,LITHO-02,-,Lithography,center_hotspot,中心热点失效，怀疑 focus map 偏差,重跑 focus/exposure matrix,681,605,88.84,0,0,0,66,10
+LOT-B,改善后,W07,28nm MCU,ETCH-07,A,Plasma Etch,improved_edge_ring,已完成 ESC 调校，边缘失效显著收敛,维持每周 ESC drift monitor,681,651,95.59,24,0,0,0,6
+LOT-B,改善后,W08,28nm MCU,ETCH-07,B,Plasma Etch,improved_cluster,已完成 PM，局部粒子 cluster 显著减少,维持 particle SPC 门限,681,660,96.92,0,14,0,0,7
+LOT-B,改善后,W09,28nm MCU,CMP-03,-,CMP,improved_scratch,机械手路径修复后仅剩零星随机失效,持续监控机械手 repeatability,681,675,99.12,0,0,1,0,5
+LOT-B,改善后,W10,28nm MCU,LITHO-02,-,Lithography,improved_center,曝光聚焦重校后中心热点消失,保留 focus map 自动校验,681,675,99.12,0,0,0,1,5
