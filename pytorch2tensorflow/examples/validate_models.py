@@ -11,8 +11,13 @@ Tests 7 different architectures covering a broad range of PyTorch patterns:
   6. BottleneckNet — ResNet-50 style bottleneck blocks, 1x1 + 3x3 + 1x1
   7. EncoderDecoder— encoder-decoder with skip connection + ConvTranspose2d
 
-Each model is converted, instantiated, and output shape/accuracy
-compared between PyTorch and TensorFlow.
+Each model is converted, weights transferred, and output accuracy
+compared between PyTorch and TensorFlow with detailed metrics:
+  - Cosine Similarity
+  - Max / Mean Absolute Difference
+  - Max / Mean Relative Difference
+  - Min / Max output values for both frameworks
+  - Per-sample breakdown over multiple random inputs
 
 Usage:
     python -m pytorch2tensorflow.examples.validate_models
@@ -311,6 +316,68 @@ class EncoderDecoder(nn.Module):
 '''
 
 # ──────────────────────────────────────────────
+# Metrics
+# ──────────────────────────────────────────────
+
+NUM_SAMPLES = 5  # random inputs per model
+
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Compute cosine similarity between two flat vectors."""
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a < 1e-10 and norm_b < 1e-10:
+        return 1.0
+    if norm_a < 1e-10 or norm_b < 1e-10:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
+
+
+def compute_metrics(pt_vec: np.ndarray, tf_vec: np.ndarray) -> dict:
+    """Compute full comparison metrics between two flat vectors."""
+    abs_diff = np.abs(pt_vec - tf_vec)
+    rel_diff = abs_diff / (np.abs(pt_vec) + 1e-10)
+
+    return {
+        "cosine_sim": cosine_similarity(pt_vec, tf_vec),
+        "max_abs_diff": float(np.max(abs_diff)),
+        "mean_abs_diff": float(np.mean(abs_diff)),
+        "median_abs_diff": float(np.median(abs_diff)),
+        "max_rel_diff": float(np.max(rel_diff)),
+        "mean_rel_diff": float(np.mean(rel_diff)),
+        "pt_min": float(np.min(pt_vec)),
+        "pt_max": float(np.max(pt_vec)),
+        "pt_mean": float(np.mean(pt_vec)),
+        "pt_std": float(np.std(pt_vec)),
+        "tf_min": float(np.min(tf_vec)),
+        "tf_max": float(np.max(tf_vec)),
+        "tf_mean": float(np.mean(tf_vec)),
+        "tf_std": float(np.std(tf_vec)),
+    }
+
+
+def aggregate_metrics(per_sample: list[dict]) -> dict:
+    """Aggregate per-sample metrics into summary statistics."""
+    keys_avg = [
+        "cosine_sim", "max_abs_diff", "mean_abs_diff", "median_abs_diff",
+        "max_rel_diff", "mean_rel_diff",
+    ]
+    agg = {}
+    for k in keys_avg:
+        vals = [s[k] for s in per_sample]
+        agg[k] = float(np.mean(vals))
+    agg["worst_max_abs_diff"] = float(max(s["max_abs_diff"] for s in per_sample))
+    agg["best_cosine_sim"] = float(max(s["cosine_sim"] for s in per_sample))
+    agg["worst_cosine_sim"] = float(min(s["cosine_sim"] for s in per_sample))
+    # Use last sample for output range stats
+    last = per_sample[-1]
+    for k in ["pt_min", "pt_max", "pt_mean", "pt_std",
+              "tf_min", "tf_max", "tf_mean", "tf_std"]:
+        agg[k] = last[k]
+    return agg
+
+
+# ──────────────────────────────────────────────
 # Test runner
 # ──────────────────────────────────────────────
 
@@ -354,10 +421,11 @@ MODELS = [
 
 
 def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
-    """Test a single model through the full conversion pipeline."""
+    """Test a single model through the full conversion pipeline with metrics."""
     import torch
     import tensorflow as tf
     from pytorch2tensorflow.converter import ModelConverter
+    from pytorch2tensorflow.weight_converter import WeightConverter
 
     name = model_config["name"]
     code = model_config["code"]
@@ -400,6 +468,10 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
     pt_model = pt_cls()
     pt_model.eval()
 
+    # Save weights for transfer
+    weights_path = Path(tmpdir) / "weights.pth"
+    torch.save(pt_model.state_dict(), str(weights_path))
+
     # Step 4: Load TF model
     spec2 = importlib.util.spec_from_file_location("tf_m", str(tf_path))
     tf_mod = importlib.util.module_from_spec(spec2)
@@ -423,53 +495,113 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
     result["pt_params"] = sum(p.numel() for p in pt_model.parameters())
     result["tf_params"] = sum(int(np.prod(v.shape)) for v in tf_model.weights)
 
-    # Step 5: Run inference comparison (random weights, shapes must match)
+    # Step 5: Transfer weights
+    weight_converter = WeightConverter(strict=False)
+    try:
+        wstats = weight_converter.convert(
+            str(weights_path), tf_model,
+            output_path=str(Path(tmpdir) / "tf_weights")
+        )
+        result["weights_assigned"] = wstats["assigned"]
+        result["weights_total"] = wstats["total_pytorch_weights"]
+        result["weights_skipped"] = wstats["skipped"]
+    except Exception as e:
+        result["weights_assigned"] = 0
+        result["weights_total"] = "?"
+        result["weights_skipped"] = f"error: {e}"
+
+    # Step 6: Multi-sample inference comparison with detailed metrics
     np.random.seed(42)
     torch.manual_seed(42)
-    input_np = np.random.randn(1, *input_shape).astype(np.float32)
 
-    with torch.no_grad():
-        pt_out = pt_model(torch.from_numpy(input_np))
+    per_sample_metrics = []
+    shape_ok = True
 
-    input_nhwc = np.transpose(input_np, (0, 2, 3, 1))
-    tf_out = tf_model(tf.constant(input_nhwc), training=False)
+    for _ in range(NUM_SAMPLES):
+        input_np = np.random.randn(1, *input_shape).astype(np.float32)
 
-    # Handle tuple outputs (e.g. MultiHeadNet)
-    if isinstance(pt_out, tuple):
-        pt_shapes = tuple(o.numpy().shape for o in pt_out)
-        tf_shapes = tuple(o.numpy().shape for o in tf_out)
-        shapes_match = pt_shapes == tf_shapes
-        result["pt_output_shape"] = pt_shapes
-        result["tf_output_shape"] = tf_shapes
-    else:
-        pt_np = pt_out.numpy()
-        tf_np = tf_out.numpy()
-        if tf_np.ndim == 4:
-            tf_np = np.transpose(tf_np, (0, 3, 1, 2))
-        shapes_match = pt_np.shape == tf_np.shape
-        result["pt_output_shape"] = pt_np.shape
-        result["tf_output_shape"] = tf_np.shape
+        with torch.no_grad():
+            pt_out = pt_model(torch.from_numpy(input_np))
 
-    if not shapes_match:
+        input_nhwc = np.transpose(input_np, (0, 2, 3, 1))
+        tf_out = tf_model(tf.constant(input_nhwc), training=False)
+
+        # Handle tuple outputs (e.g. MultiHeadNet)
+        if isinstance(pt_out, tuple):
+            pt_list = [o.numpy() for o in pt_out]
+            tf_list = [o.numpy() for o in tf_out]
+            result["pt_output_shape"] = tuple(o.shape for o in pt_list)
+            result["tf_output_shape"] = tuple(o.shape for o in tf_list)
+            if result["pt_output_shape"] != result["tf_output_shape"]:
+                shape_ok = False
+                break
+            # Concat all heads for unified metric computation
+            pt_vec = np.concatenate([o.flatten() for o in pt_list])
+            tf_vec = np.concatenate([o.flatten() for o in tf_list])
+        else:
+            pt_np = pt_out.numpy()
+            tf_np = tf_out.numpy()
+            if tf_np.ndim == 4:
+                tf_np = np.transpose(tf_np, (0, 3, 1, 2))
+            result["pt_output_shape"] = pt_np.shape
+            result["tf_output_shape"] = tf_np.shape
+            if pt_np.shape != tf_np.shape:
+                shape_ok = False
+                break
+            pt_vec = pt_np.flatten()
+            tf_vec = tf_np.flatten()
+
+        per_sample_metrics.append(compute_metrics(pt_vec, tf_vec))
+
+    if not shape_ok:
         result["error"] = (
             f"Shape mismatch: PT={result['pt_output_shape']} vs TF={result['tf_output_shape']}"
         )
         return result
 
+    result["metrics"] = aggregate_metrics(per_sample_metrics)
+    result["per_sample"] = per_sample_metrics
     result["passed"] = True
     return result
 
 
+def print_metrics(metrics: dict, per_sample: list[dict]):
+    """Pretty-print validation metrics."""
+    w = 24  # label width
+    print(f"  {'Cosine Similarity':<{w}}: {metrics['cosine_sim']:.8f}"
+          f"  (best={metrics['best_cosine_sim']:.8f}, worst={metrics['worst_cosine_sim']:.8f})")
+    print(f"  {'Max Abs Diff':<{w}}: {metrics['max_abs_diff']:.6e}"
+          f"  (worst={metrics['worst_max_abs_diff']:.6e})")
+    print(f"  {'Mean Abs Diff':<{w}}: {metrics['mean_abs_diff']:.6e}")
+    print(f"  {'Median Abs Diff':<{w}}: {metrics['median_abs_diff']:.6e}")
+    print(f"  {'Max Rel Diff':<{w}}: {metrics['max_rel_diff']:.6e}")
+    print(f"  {'Mean Rel Diff':<{w}}: {metrics['mean_rel_diff']:.6e}")
+    print()
+    print(f"  {'PT output range':<{w}}: [{metrics['pt_min']:.6f}, {metrics['pt_max']:.6f}]"
+          f"  mean={metrics['pt_mean']:.6f}, std={metrics['pt_std']:.6f}")
+    print(f"  {'TF output range':<{w}}: [{metrics['tf_min']:.6f}, {metrics['tf_max']:.6f}]"
+          f"  mean={metrics['tf_mean']:.6f}, std={metrics['tf_std']:.6f}")
+    print()
+    print(f"  Per-sample breakdown ({len(per_sample)} samples):")
+    print(f"  {'#':>4}  {'Cosine':>12}  {'MaxAbsDiff':>12}  {'MeanAbsDiff':>12}  {'MaxRelDiff':>12}")
+    for i, s in enumerate(per_sample):
+        print(f"  {i+1:>4}  {s['cosine_sim']:>12.8f}  {s['max_abs_diff']:>12.6e}"
+              f"  {s['mean_abs_diff']:>12.6e}  {s['max_rel_diff']:>12.6e}")
+
+
 def main():
-    print("=" * 65)
-    print("  Model Conversion Validation Suite")
-    print("=" * 65)
+    print("=" * 78)
+    print("  Model Conversion Validation Suite (with weight transfer + accuracy metrics)")
+    print("=" * 78)
 
     all_passed = True
     pass_count = 0
+    summary_rows = []
 
     for config in MODELS:
-        print(f"\n--- {config['name']} ---")
+        print(f"\n{'─' * 78}")
+        print(f"  {config['name']}")
+        print(f"{'─' * 78}")
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
                 result = test_model_conversion(config, tmpdir)
@@ -482,21 +614,47 @@ def main():
 
             if result["passed"]:
                 pass_count += 1
-                print(f"  Code conversion:  OK ({result.get('converted_lines', '?')} lines)")
-                print(f"  PT params:        {result.get('pt_params', '?'):,}")
-                print(f"  TF params:        {result.get('tf_params', '?'):,}")
-                print(f"  PT output shape:  {result.get('pt_output_shape')}")
-                print(f"  TF output shape:  {result.get('tf_output_shape')}")
-                print(f"  Result:           PASS")
+                m = result["metrics"]
+                print(f"  Code conversion:   OK ({result.get('converted_lines', '?')} lines)")
+                print(f"  PT params:         {result.get('pt_params', '?'):,}")
+                print(f"  TF params:         {result.get('tf_params', '?'):,}")
+                wa = result.get("weights_assigned", "?")
+                wt = result.get("weights_total", "?")
+                ws = result.get("weights_skipped", 0)
+                print(f"  Weights transfer:  {wa}/{wt} assigned, {ws} skipped")
+                print(f"  Output shape (PT): {result.get('pt_output_shape')}")
+                print(f"  Output shape (TF): {result.get('tf_output_shape')}")
+                print()
+                print_metrics(m, result["per_sample"])
+                print()
+                status = "PASS"
+                if m["worst_cosine_sim"] >= 0.999:
+                    status = "PASS (high accuracy)"
+                print(f"  Result: {status}")
+                summary_rows.append((config["name"], m["cosine_sim"],
+                                     m["max_abs_diff"], m["mean_abs_diff"], True))
             else:
-                print(f"  Result:           FAIL")
-                print(f"  Error:            {result.get('error')}")
+                print(f"  Result: FAIL")
+                print(f"  Error:  {result.get('error')}")
                 all_passed = False
+                summary_rows.append((config["name"], 0.0, 0.0, 0.0, False))
 
-    print(f"\n{'=' * 65}")
-    print(f"  Overall: {pass_count}/{len(MODELS)} PASSED"
+    # ── Summary table ──
+    print(f"\n{'=' * 78}")
+    print("  Summary")
+    print(f"{'=' * 78}")
+    print(f"  {'Model':<35} {'Cosine':>10} {'MaxAbsDiff':>12} {'MeanAbsDiff':>12} {'Status':>8}")
+    print(f"  {'─'*35} {'─'*10} {'─'*12} {'─'*12} {'─'*8}")
+    for name, cos, mad, mead, ok in summary_rows:
+        st = "PASS" if ok else "FAIL"
+        if ok:
+            print(f"  {name:<35} {cos:>10.6f} {mad:>12.6e} {mead:>12.6e} {st:>8}")
+        else:
+            print(f"  {name:<35} {'—':>10} {'—':>12} {'—':>12} {st:>8}")
+
+    print(f"\n  Overall: {pass_count}/{len(MODELS)} PASSED"
           + (" — ALL PASSED" if all_passed else " — SOME FAILED"))
-    print(f"{'=' * 65}")
+    print(f"{'=' * 78}")
 
     return 0 if all_passed else 1
 

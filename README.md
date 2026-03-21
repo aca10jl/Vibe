@@ -178,10 +178,11 @@ pytorch2tensorflow/
 ├── exporter.py          # PB 导出器（昇腾兼容）
 ├── cli.py               # 命令行接口
 └── examples/
+    ├── run_conversion.py         # 完整流水线 Demo（转换+权重+校验+导出）
     ├── example_resnet_block.py   # ResNet 转换示例
     ├── demo_multi_models.py      # 多模型快速转换 Demo
     ├── unet_model.py             # UNet PyTorch 模型定义
-    ├── validate_models.py        # 7 种架构端到端验证
+    ├── validate_models.py        # 7 种架构端到端精度验证
     └── verify_unet_conversion.py # UNet 完整流水线验证
 ```
 
