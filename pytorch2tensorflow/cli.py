@@ -140,7 +140,11 @@ def cmd_export(args: argparse.Namespace) -> None:
     exporter = PBExporter()
 
     # Load TF model
-    tf_model = _load_tf_model(args.tf_model, input_shapes[0], args.tf_weights)
+    tf_model = _load_tf_model(
+        args.tf_model, input_shapes[0], args.tf_weights,
+        class_name=getattr(args, "tf_class_name", None),
+        model_args=getattr(args, "model_args", None),
+    )
 
     output_dir = args.output or "export_output"
     results = exporter.export_and_verify(
@@ -219,6 +223,7 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
     )
     tf_model = _load_tf_model(
         tf_model_path, input_shapes[0],
+        class_name=getattr(args, "class_name", None),
         model_args=getattr(args, "model_args", None),
     )
 
@@ -481,6 +486,10 @@ def create_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--input-shape", nargs="+", required=True, help="Input shapes")
     p_export.add_argument("-o", "--output", help="Output directory")
     p_export.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
+    p_export.add_argument(
+        "--tf-class-name", help="TF model class name to use (default: auto-detect)")
+    p_export.add_argument(
+        "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
 
     # ── auto ──
     p_auto = subparsers.add_parser(
@@ -495,6 +504,10 @@ def create_parser() -> argparse.ArgumentParser:
         "--channels-first", action="store_true",
         help="Keep NCHW data format (matching PyTorch)",
     )
+    p_auto.add_argument(
+        "--class-name", help="PyTorch model class name to use (default: auto-detect)")
+    p_auto.add_argument(
+        "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
 
     # ── full ──
     p_full = subparsers.add_parser("full", help="Run complete conversion pipeline")
