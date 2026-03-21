@@ -409,13 +409,47 @@ class WeightConverter:
         """
         import tensorflow as tf
 
+        # Pre-identify BN layers by finding running_mean/running_var keys
+        bn_prefixes = set()
+        for name in state_dict.keys():
+            if name.endswith(".running_mean") or name.endswith(".running_var"):
+                prefix = name.rsplit(".", 1)[0]
+                bn_prefixes.add(prefix)
+
+        # Pre-identify ConvTranspose layers: 4D weight where dim0 < dim1
+        # (PyTorch ConvTranspose2d shape is [I, O, H, W] where I < O
+        #  while regular Conv2d is [O, I, H, W] where O > I typically)
+        # Also check the TF model for Conv2DTranspose layers to confirm.
+        conv_transpose_prefixes = set()
+        # Collect TF Conv2DTranspose layer names
+        tf_has_conv_transpose = any(
+            "conv2d_transpose" in w.name.lower() or "conv_transpose" in w.name.lower()
+            for w in tf_model.weights
+        )
+        if tf_has_conv_transpose:
+            for name, tensor in state_dict.items():
+                if name.endswith(".weight") and tensor.ndim == 4:
+                    # ConvTranspose2d: shape [I, O, H, W] where typically I < O
+                    # But we also check name heuristic
+                    parent = name.rsplit(".", 1)[0]
+                    name_lower = name.lower()
+                    if ("up" in name_lower or "deconv" in name_lower
+                            or "transpose" in name_lower
+                            or "upsample" in name_lower):
+                        conv_transpose_prefixes.add(parent)
+                    elif tensor.shape[0] < tensor.shape[1]:
+                        # [I, O, H, W] pattern: input channels < output channels
+                        # This is common in ConvTranspose (upsampling doubles channels)
+                        conv_transpose_prefixes.add(parent)
+
         # Classify PT weights into ordered groups
         pt_weights = []
         for name, tensor in state_dict.items():
             if any(skip in name for skip in self.SKIP_KEYS):
                 continue
             np_array = tensor.cpu().numpy()
-            role = self._classify_weight_role(name, np_array)
+            role = self._classify_weight_role(
+                name, np_array, bn_prefixes, conv_transpose_prefixes)
             pt_weights.append((name, np_array, role))
 
         # Classify TF weights
@@ -443,7 +477,8 @@ class WeightConverter:
                     continue
 
                 # Apply transpose
-                transpose_rule = self._get_transpose_rule(pt_name, np_array)
+                transpose_rule = self._get_transpose_rule(
+                    pt_name, np_array, conv_transpose_prefixes)
                 converted = np.transpose(np_array, transpose_rule) if transpose_rule else np_array
 
                 # Check shape compatibility
@@ -494,17 +529,44 @@ class WeightConverter:
         return stats
 
     @staticmethod
-    def _classify_weight_role(name: str, array: np.ndarray) -> str:
-        """Classify a PyTorch weight by its role."""
+    def _classify_weight_role(
+        name: str, array: np.ndarray,
+        bn_prefixes: set[str] | None = None,
+        conv_transpose_prefixes: set[str] | None = None,
+    ) -> str:
+        """Classify a PyTorch weight by its role.
+
+        Args:
+            name: PyTorch weight name (e.g. 'layer1.bn1.weight').
+            array: Weight tensor as numpy array.
+            bn_prefixes: Set of layer prefixes known to be BN layers
+                (identified by the presence of running_mean/running_var siblings).
+            conv_transpose_prefixes: Set of layer prefixes known to be
+                ConvTranspose layers (identified by shape pattern I<O for 4D weights).
+        """
         suffix = name.split(".")[-1]
         name_lower = name.lower()
 
+        # Check if this weight belongs to a known BN layer
+        parent = name.rsplit(".", 1)[0] if "." in name else ""
+        is_bn_layer = False
+        if bn_prefixes and parent in bn_prefixes:
+            is_bn_layer = True
+        elif "bn" in name_lower or "batch_norm" in name_lower or "norm" in name_lower:
+            is_bn_layer = True
+
+        # Check if ConvTranspose layer
+        is_conv_transpose = False
+        if conv_transpose_prefixes and parent in conv_transpose_prefixes:
+            is_conv_transpose = True
+        elif "transpose" in name_lower or "convtranspose" in name_lower:
+            is_conv_transpose = True
+
         if suffix == "weight":
-            if "bn" in name_lower or "batch_norm" in name_lower or "norm" in name_lower:
-                if array.ndim == 1:
-                    return "bn_gamma"
+            if is_bn_layer and array.ndim == 1:
+                return "bn_gamma"
             if array.ndim == 4:
-                if "transpose" in name_lower:
+                if is_conv_transpose:
                     return "conv_transpose_kernel"
                 return "conv_kernel"
             if array.ndim == 2:
@@ -514,7 +576,7 @@ class WeightConverter:
             if array.ndim == 1:
                 return "bn_gamma"  # fallback for 1D weight
         elif suffix == "bias":
-            if "bn" in name_lower or "batch_norm" in name_lower or "norm" in name_lower:
+            if is_bn_layer:
                 return "bn_beta"
             return "bias"
         elif suffix == "running_mean":
@@ -561,19 +623,26 @@ class WeightConverter:
     # Internal: Transpose rules
     # ────────────────────────────────────────
 
-    def _get_transpose_rule(self, name: str, array: np.ndarray) -> Optional[tuple]:
+    def _get_transpose_rule(
+        self, name: str, array: np.ndarray,
+        conv_transpose_prefixes: set[str] | None = None,
+    ) -> Optional[tuple]:
         """Determine the transpose rule for a given weight."""
         ndim = array.ndim
 
         # Check for specific layer types in the name
         name_lower = name.lower()
+        parent = name.rsplit(".", 1)[0] if "." in name else ""
 
         if ndim == 4:
-            if "conv_transpose" in name_lower or "convtranspose" in name_lower:
+            # ConvTranspose: check explicit name, known prefixes, or shape pattern
+            if ("conv_transpose" in name_lower or "convtranspose" in name_lower
+                    or (conv_transpose_prefixes and parent in conv_transpose_prefixes)):
                 return self.TRANSPOSE_RULES["conv_transpose"]
-            if "depthwise" in name_lower or (
-                "conv" in name_lower and array.shape[1] == 1
-            ):
+            # Only classify as depthwise if explicitly named so.
+            # Do NOT use shape[1]==1 heuristic — regular convs with 1
+            # input channel (e.g. grayscale) have the same pattern.
+            if "depthwise" in name_lower:
                 return self.TRANSPOSE_RULES["depthwise"]
             if "conv" in name_lower or "weight" in name.split(".")[-1]:
                 # Check if it looks like a conv weight (not BN)

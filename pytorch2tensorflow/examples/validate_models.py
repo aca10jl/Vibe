@@ -321,6 +321,13 @@ class EncoderDecoder(nn.Module):
 
 NUM_SAMPLES = 5  # random inputs per model
 
+# ── Strict PASS/FAIL thresholds ──
+# A model must satisfy ALL of the following to PASS:
+COSINE_THRESHOLD = 0.99       # avg cosine similarity ≥ 0.99
+COSINE_WORST_THRESHOLD = 0.98 # worst single-sample cosine ≥ 0.98
+MAX_ABS_DIFF_THRESHOLD = 0.1  # avg max absolute diff ≤ 0.1
+MEAN_ABS_DIFF_THRESHOLD = 0.01  # avg mean absolute diff ≤ 0.01
+
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     """Compute cosine similarity between two flat vectors."""
@@ -561,7 +568,26 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
 
     result["metrics"] = aggregate_metrics(per_sample_metrics)
     result["per_sample"] = per_sample_metrics
-    result["passed"] = True
+
+    # Strict metric-based PASS/FAIL
+    m = result["metrics"]
+    checks = {
+        "cosine_sim >= {:.2f}".format(COSINE_THRESHOLD):
+            m["cosine_sim"] >= COSINE_THRESHOLD,
+        "worst_cosine >= {:.2f}".format(COSINE_WORST_THRESHOLD):
+            m["worst_cosine_sim"] >= COSINE_WORST_THRESHOLD,
+        "max_abs_diff <= {:.2f}".format(MAX_ABS_DIFF_THRESHOLD):
+            m["max_abs_diff"] <= MAX_ABS_DIFF_THRESHOLD,
+        "mean_abs_diff <= {:.4f}".format(MEAN_ABS_DIFF_THRESHOLD):
+            m["mean_abs_diff"] <= MEAN_ABS_DIFF_THRESHOLD,
+    }
+    result["checks"] = checks
+    result["passed"] = all(checks.values())
+
+    if not result["passed"]:
+        failed_checks = [k for k, v in checks.items() if not v]
+        result["error"] = "Failed criteria: " + ", ".join(failed_checks)
+
     return result
 
 
@@ -612,9 +638,8 @@ def main():
                     "error": str(e),
                 }
 
-            if result["passed"]:
-                pass_count += 1
-                m = result["metrics"]
+            m = result.get("metrics")
+            if m:
                 print(f"  Code conversion:   OK ({result.get('converted_lines', '?')} lines)")
                 print(f"  PT params:         {result.get('pt_params', '?'):,}")
                 print(f"  TF params:         {result.get('tf_params', '?'):,}")
@@ -626,13 +651,23 @@ def main():
                 print(f"  Output shape (TF): {result.get('tf_output_shape')}")
                 print()
                 print_metrics(m, result["per_sample"])
+
+                # Print criteria check results
                 print()
-                status = "PASS"
-                if m["worst_cosine_sim"] >= 0.999:
-                    status = "PASS (high accuracy)"
-                print(f"  Result: {status}")
+                checks = result.get("checks", {})
+                for criterion, ok in checks.items():
+                    mark = "PASS" if ok else "FAIL"
+                    print(f"  [{mark}] {criterion}")
+
+                if result["passed"]:
+                    pass_count += 1
+                    print(f"\n  Result: PASS")
+                else:
+                    all_passed = False
+                    print(f"\n  Result: FAIL — {result.get('error', '')}")
                 summary_rows.append((config["name"], m["cosine_sim"],
-                                     m["max_abs_diff"], m["mean_abs_diff"], True))
+                                     m["max_abs_diff"], m["mean_abs_diff"],
+                                     result["passed"]))
             else:
                 print(f"  Result: FAIL")
                 print(f"  Error:  {result.get('error')}")

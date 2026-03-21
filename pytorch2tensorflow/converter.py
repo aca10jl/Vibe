@@ -535,18 +535,29 @@ class ModelConverter:
     def _convert_torch_flatten(self, source: str) -> str:
         """Convert torch.flatten(x, start_dim) to tf.reshape.
 
-        torch.flatten(x, 1) flattens from dim 1 onwards:
-            → tf.reshape(x, [tf.shape(x)[0], -1])
+        torch.flatten(x, 1) flattens from dim 1 onwards.
+        Because TF uses NHWC while PyTorch uses NCHW, we must transpose
+        4D tensors to NCHW order before flattening so that the Dense layer
+        sees elements in the same order as the PyTorch Linear layer.
+
+            → tf.reshape(tf.transpose(x, [0,3,1,2]), [tf.shape(x)[0], -1])
+
         torch.flatten(x, 0) flattens everything:
             → tf.reshape(x, [-1])
         torch.flatten(x) defaults to start_dim=0.
         """
-        # torch.flatten(x, 1) → tf.reshape(x, [tf.shape(x)[0], -1])
         def _replace_flatten(match: re.Match) -> str:
             tensor = match.group(1)
             start_dim = match.group(2).strip() if match.group(2) else "0"
             if start_dim == "1":
-                return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
+                # Transpose NHWC→NCHW before flatten so element order
+                # matches what the Dense/Linear kernel expects.
+                return (
+                    f"tf.reshape("
+                    f"tf.transpose({tensor}, [0, 3, 1, 2]) "
+                    f"if len({tensor}.shape) == 4 else {tensor}, "
+                    f"[tf.shape({tensor})[0], -1])"
+                )
             elif start_dim == "0":
                 return f"tf.reshape({tensor}, [-1])"
             else:
@@ -791,7 +802,12 @@ class ModelConverter:
             tensor = match.group(1)
             start_dim = match.group(2)
             if start_dim == "1":
-                return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
+                return (
+                    f"tf.reshape("
+                    f"tf.transpose({tensor}, [0, 3, 1, 2]) "
+                    f"if len({tensor}.shape) == 4 else {tensor}, "
+                    f"[tf.shape({tensor})[0], -1])"
+                )
             elif start_dim == "0":
                 return f"tf.reshape({tensor}, [-1])"
             else:
