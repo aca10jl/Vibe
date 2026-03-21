@@ -304,29 +304,38 @@ class ModelConverter:
         # Remove in_channels (first positional arg) from Conv layer calls.
         # PyTorch: Conv2d(in_channels, out_channels, ...) — 2 positional args
         # TF:      Conv2D(filters, ...) — only needs out_channels
-        # Strategy: match calls with >=2 positional args before any keyword arg,
-        # and remove only the first positional arg.
-        conv_layer_pattern = (
-            r"(tf\.keras\.layers\.Conv\w+)"  # layer name
-            r"\(\s*"
-            r"([^,)]+)"                       # first positional arg (in_channels)
-            r"\s*,\s*"
-            r"([^,)=]+)"                      # second positional arg (out_channels) — no '='
-            r"(?=\s*[,)])"                    # must be followed by , or ) — not = (keyword arg)
+        # Strategy: match the full call from layer name to closing paren,
+        # then drop only the first positional arg via a callback.
+        conv_call_full = (
+            r"(" + re.escape(tf_layer) + r")"  # specific layer name
+            r"\(([^)]*)\)"                      # entire argument list
         )
 
         def _drop_first_pos_arg(match: re.Match) -> str:
             layer = match.group(1)
-            # skip first arg (in_channels), keep second (out_channels)
-            second_arg = match.group(3).strip()
-            return f"{layer}({second_arg}"
+            args_str = match.group(2).strip()
+            if not args_str:
+                return f"{layer}()"
+            # Split on commas, being careful with nested parens
+            parts = [p.strip() for p in args_str.split(",")]
+            # Count leading positional args (no keyword '=' sign).
+            # Must distinguish keyword '=' from comparison operators (==, !=, <=, >=).
+            num_positional = 0
+            for p in parts:
+                if re.search(r"(?<![=!<>])=(?!=)", p):
+                    break
+                num_positional += 1
+            # Only drop first arg if there are >=2 positional args
+            if num_positional >= 2:
+                parts = parts[1:]
+            return f"{layer}({', '.join(parts)})"
 
-        source = re.sub(conv_layer_pattern, _drop_first_pos_arg, source)
+        source = re.sub(conv_call_full, _drop_first_pos_arg, source)
 
         # Rename Conv keyword args, but ONLY inside tf.keras.layers.XXX(...) calls.
         # Using a callback to avoid renaming identically-named function parameters
         # (e.g. `def __init__(self, ..., stride=1)` must NOT become `strides=1`).
-        conv_call_re = r"(tf\.keras\.layers\.\w+\([^)]*)"
+        conv_call_re = r"(" + re.escape(tf_layer) + r"\([^)]*)"
         keyword_renames = [
             (r"\bpadding\s*=\s*(\d+)", self._padding_value_to_tf),
             (r"\bstride\s*=", "strides="),
