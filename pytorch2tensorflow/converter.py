@@ -50,6 +50,10 @@ class ModelConverter:
         self.channels_first = channels_first
         self.add_channel_convert = add_channel_convert and not channels_first
         self._custom_layers_needed: set[str] = set()
+        # Track conv layers that need explicit padding (stride>1 + padding>0)
+        # Each entry is (attr_pattern, pad_value, ndim) where attr_pattern
+        # matches the attribute call (e.g. "self.conv") in the call() method
+        self._explicit_padding_convs: list[tuple[str, int, int]] = []
 
     # ────────────────────────────────────────
     # Public API
@@ -89,6 +93,7 @@ class ModelConverter:
             Converted TensorFlow/Keras model source code.
         """
         self._custom_layers_needed.clear()
+        self._explicit_padding_convs.clear()
 
         # Step 1: Convert imports
         result = self._convert_imports(source)
@@ -101,6 +106,9 @@ class ModelConverter:
 
         # Step 4: Convert forward() → call()
         result = self._convert_forward_to_call(result)
+
+        # Step 4b: Inject explicit padding for stride>1 conv layers
+        result = self._inject_explicit_padding(result)
 
         # Step 5: Convert functional operations
         result = self._convert_functional_ops(result)
@@ -258,6 +266,15 @@ class ModelConverter:
 
     def _convert_layer_call(self, source: str, pt_layer: str, tf_layer: str) -> str:
         """Convert a specific layer constructor call."""
+        # If tf_layer already contains '(' (e.g. "Activation('gelu')"),
+        # replace the entire `nn.GELU()` call with the tf_layer value directly,
+        # stripping the original arguments.
+        if "(" in tf_layer:
+            # Match the full call nn.GELU(...) and replace with tf_layer
+            pattern = re.escape(pt_layer) + r"\s*\([^)]*\)"
+            source = re.sub(pattern, tf_layer, source)
+            return source
+
         pattern = re.escape(pt_layer) + r"\s*\("
 
         def _replace_layer(match: re.Match) -> str:
@@ -274,6 +291,10 @@ class ModelConverter:
             source = self._convert_linear_params(source)
         if "AdaptiveAvgPool" in pt_layer or "AdaptiveMaxPool" in pt_layer:
             source = self._convert_adaptive_pool_params(source, tf_layer)
+        if "LayerNorm" in pt_layer:
+            source = self._convert_layernorm_params(source)
+        if "GroupNorm" in pt_layer:
+            source = self._convert_groupnorm_params(source)
 
         # In channels_first mode, pooling/upsampling layers also need data_format
         if self.channels_first and ("Pool" in pt_layer or "Upsamp" in pt_layer):
@@ -350,6 +371,10 @@ class ModelConverter:
                 return re.sub(_kw, _rep, call_str)
             source = re.sub(conv_call_re, _rename_in_call, source)
 
+        # Fix stride>1 + padding asymmetry (must run after keyword renames)
+        if not self.channels_first:
+            source = self._fix_stride_padding(source, tf_layer)
+
         # Add data_format for Conv layers
         if self.channels_first:
             # Insert data_format='channels_first' before the closing paren
@@ -375,6 +400,74 @@ class ModelConverter:
             return "padding='valid'"
         else:
             return f"padding='same'"
+
+    def _fix_stride_padding(self, source: str, tf_layer: str) -> str:
+        """Fix Conv layers with stride>1 and padding>0.
+
+        TF's padding='same' uses asymmetric padding for stride>1, which
+        differs from PyTorch's symmetric padding. For these cases, we
+        convert to padding='valid' and inject explicit tf.pad() calls
+        in the call() method.
+        """
+        # Determine conv dimensionality for pad shape
+        if "1D" in tf_layer or "1d" in tf_layer:
+            ndim = 1
+        elif "3D" in tf_layer or "3d" in tf_layer:
+            ndim = 3
+        else:
+            ndim = 2
+
+        # Find Conv calls with strides>1 and padding='same'
+        # Pattern: self.xxx = tf.keras.layers.Conv2D(..., strides=N, ..., padding='same', ...)
+        conv_init_pattern = (
+            r"(self\.(\w+)\s*=\s*" + re.escape(tf_layer) + r"\([^)]*)"
+        )
+
+        def _check_and_fix(match: re.Match) -> str:
+            call_str = match.group(0)
+            attr_name = match.group(2)
+
+            # Check if strides > 1
+            stride_m = re.search(r"strides\s*=\s*(\d+)", call_str)
+            if not stride_m:
+                return call_str
+            stride_val = int(stride_m.group(1))
+            if stride_val <= 1:
+                return call_str
+
+            # Check if padding='same' and extract original padding value
+            if "padding='same'" not in call_str:
+                return call_str
+
+            # Get the original padding value from the _padding_value_to_tf call
+            # We already converted padding=N to padding='same', so we need to
+            # extract what N was. Look for kernel_size to estimate padding.
+            kernel_m = re.search(r"kernel_size\s*=\s*(\d+)", call_str)
+            if not kernel_m:
+                # Try second positional arg (filters is first, kernel_size is second)
+                parts = call_str.split("(", 1)[1].split(",")
+                for i, p in enumerate(parts):
+                    p = p.strip()
+                    if p.isdigit() and i >= 1:  # second positional = kernel_size
+                        kernel_m = type('M', (), {'group': lambda self, n: p})()
+                        break
+            if not kernel_m:
+                return call_str
+
+            kernel_size = int(kernel_m.group(1))
+            pad_val = kernel_size // 2  # PyTorch padding=1 typically = kernel//2
+
+            # Record for explicit padding injection
+            self._explicit_padding_convs.append(
+                (f"self.{attr_name}", pad_val, ndim)
+            )
+
+            # Change padding='same' to padding='valid'
+            call_str = call_str.replace("padding='same'", "padding='valid'")
+            return call_str
+
+        source = re.sub(conv_init_pattern, _check_and_fix, source)
+        return source
 
     def _convert_batchnorm_params(self, source: str) -> str:
         """Convert BatchNorm parameters.
@@ -465,6 +558,68 @@ class ModelConverter:
         source = re.sub(r"(tf\.keras\.layers\.Dense\([^)]*)", _rename_bias, source)
         return source
 
+    def _convert_layernorm_params(self, source: str) -> str:
+        """Convert LayerNorm → LayerNormalization parameters.
+
+        PyTorch: nn.LayerNorm(normalized_shape, eps=...)
+        TF:      tf.keras.layers.LayerNormalization(epsilon=...)
+
+        The normalized_shape (first positional arg) must be removed since TF
+        LayerNormalization normalizes over the last axis by default.
+        """
+        pattern = (
+            r"(tf\.keras\.layers\.LayerNormalization)"
+            r"\(\s*"
+            r"(?:\([^)]*\)|[^,)]+)"  # first positional arg (normalized_shape, could be tuple)
+            r"((?:\s*,\s*[^)]*)?)"   # rest of args (optional)
+            r"\)"
+        )
+
+        def _drop_normalized_shape(match: re.Match) -> str:
+            layer = match.group(1)
+            rest = match.group(2).strip()
+            if rest.startswith(","):
+                rest = rest[1:].strip()
+            # Rename eps → epsilon
+            rest = re.sub(r"\beps\s*=", "epsilon=", rest)
+            return f"{layer}({rest})"
+
+        source = re.sub(pattern, _drop_normalized_shape, source)
+        return source
+
+    def _convert_groupnorm_params(self, source: str) -> str:
+        """Convert GroupNorm → GroupNormalization parameters.
+
+        PyTorch: nn.GroupNorm(num_groups, num_channels, eps=...)
+        TF:      tf.keras.layers.GroupNormalization(groups=num_groups, epsilon=...)
+
+        The num_channels (second positional arg) must be removed since TF infers it.
+        """
+        pattern = (
+            r"(tf\.keras\.layers\.GroupNormalization)"
+            r"\(\s*"
+            r"([^,)]+)"              # first positional arg (num_groups)
+            r"\s*,\s*"
+            r"([^,)=]+)"             # second positional arg (num_channels) — no '='
+            r"((?:\s*,\s*[^)]*)?)"   # rest of args (optional)
+            r"\)"
+        )
+
+        def _drop_num_channels(match: re.Match) -> str:
+            layer = match.group(1)
+            num_groups = match.group(2).strip()
+            rest = match.group(4).strip()
+            if rest.startswith(","):
+                rest = rest[1:].strip()
+            # Rename eps → epsilon
+            rest = re.sub(r"\beps\s*=", "epsilon=", rest)
+            if rest:
+                return f"{layer}({num_groups}, {rest})"
+            return f"{layer}({num_groups})"
+
+        source = re.sub(pattern, _drop_num_channels, source)
+        return source
+
     def _convert_adaptive_pool_params(self, source: str, tf_layer: str) -> str:
         """Convert AdaptiveAvgPool/AdaptiveMaxPool → GlobalAveragePooling/GlobalMaxPool.
 
@@ -516,6 +671,60 @@ class ModelConverter:
         )
         # Handle training mode references
         source = source.replace("self.training", "training")
+        return source
+
+    def _inject_explicit_padding(self, source: str) -> str:
+        """Inject tf.pad() calls before Conv layers that need explicit padding.
+
+        When stride>1 with padding>0, TF's padding='same' differs from
+        PyTorch's symmetric padding. We convert to padding='valid' and
+        add explicit tf.pad() calls in the call() method.
+        """
+        if not self._explicit_padding_convs:
+            return source
+
+        for attr_pattern, pad_val, ndim in self._explicit_padding_convs:
+            # Find "self.conv(expr)" in the call method and prepend tf.pad()
+            # We need to match the conv call and insert padding before it.
+            escaped = re.escape(attr_pattern)
+
+            if ndim == 1:
+                pad_str = f"[[0, 0], [{pad_val}, {pad_val}], [0, 0]]"
+            elif ndim == 2:
+                pad_str = (
+                    f"[[0, 0], [{pad_val}, {pad_val}], "
+                    f"[{pad_val}, {pad_val}], [0, 0]]"
+                )
+            else:  # 3D
+                pad_str = (
+                    f"[[0, 0], [{pad_val}, {pad_val}], "
+                    f"[{pad_val}, {pad_val}], "
+                    f"[{pad_val}, {pad_val}], [0, 0]]"
+                )
+
+            # Match: ... = self.conv(expr) or return self.conv(expr) or self.conv(self.other(x))
+            # We insert tf.pad before the call
+            def _add_pad(m: re.Match, _pad=pad_str) -> str:
+                full = m.group(0)
+                indent = m.group(1)
+                arg = m.group(2)
+                # Replace self.conv(arg) with self.conv(tf.pad(arg, paddings))
+                return full.replace(
+                    f"{attr_pattern}({arg})",
+                    f"{attr_pattern}(tf.pad({arg}, {_pad}))",
+                )
+
+            # Match self.attr(single_word_arg) — handles simple cases
+            source = re.sub(
+                r"([ \t]*)([^\n]*)" + escaped + r"\((\w+)\)",
+                lambda m, _a=attr_pattern, _p=pad_str: m.group(0).replace(
+                    f"{_a}({m.group(3)})",
+                    f"{_a}(tf.pad({m.group(3)}, {_p}))",
+                ),
+                source,
+            )
+
+        self._explicit_padding_convs.clear()
         return source
 
     # ────────────────────────────────────────
@@ -600,6 +809,23 @@ class ModelConverter:
         if pt_func == "torch.cat":
             source = source.replace("torch.cat", "tf.concat")
             source = re.sub(r"\bdim\s*=", "axis=", source)
+            return source
+
+        # Handle torch.clamp — rename min=/max= kwargs
+        if pt_func in ("torch.clamp", "torch.clip"):
+            source = source.replace(pt_func, tf_func)
+            # Rename min= → clip_value_min=, max= → clip_value_max=
+            # within tf.clip_by_value calls (simple keyword rename)
+            source = re.sub(
+                r"\bmin\s*=\s*(?=-?[\d.])",
+                "clip_value_min=",
+                source,
+            )
+            source = re.sub(
+                r"\bmax\s*=\s*(?=-?[\d.])",
+                "clip_value_max=",
+                source,
+            )
             return source
 
         # Handle F.interpolate variants
@@ -784,16 +1010,18 @@ class ModelConverter:
         source = re.sub(r"\.contiguous\(\)", "", source)
 
         # .unsqueeze(dim) → tf.expand_dims(x, axis=dim)
+        # Use negative lookbehind to avoid matching tf.expand_dims(...) or similar
         source = re.sub(
-            r"(\w+)\.unsqueeze\s*\(([^)]*)\)",
-            r"tf.expand_dims(\1, axis=\2)",
+            r"(?<!\.)(\w+)\.unsqueeze\s*\(([^)]*)\)",
+            lambda m: f"tf.expand_dims({m.group(1)}, axis={m.group(2)})" if m.group(1) != "tf" else m.group(0),
             source,
         )
 
         # .squeeze(dim) → tf.squeeze(x, axis=dim)
+        # Avoid re-matching already-converted tf.squeeze(...)
         source = re.sub(
-            r"(\w+)\.squeeze\s*\(([^)]*)\)",
-            r"tf.squeeze(\1, axis=\2)",
+            r"(?<!\.)(\w+)\.squeeze\s*\(([^)]*)\)",
+            lambda m: f"tf.squeeze({m.group(1)}, axis={m.group(2)})" if m.group(1) != "tf" else m.group(0),
             source,
         )
 
@@ -820,14 +1048,24 @@ class ModelConverter:
         )
 
         # .mean(dim) / .sum(dim)
+        def _replace_reduce(tf_func):
+            def _replacer(match):
+                tensor = match.group(1)
+                args = match.group(2)
+                # Rename dim= → axis=, keepdim= → keepdims= inline
+                args = re.sub(r"\bdim\s*=", "axis=", args)
+                args = re.sub(r"\bkeepdim\s*=", "keepdims=", args)
+                return f"{tf_func}({tensor}, {args})"
+            return _replacer
+
         source = re.sub(
             r"(\w+)\.mean\s*\(([^)]*)\)",
-            r"tf.reduce_mean(\1, axis=\2)",
+            _replace_reduce("tf.reduce_mean"),
             source,
         )
         source = re.sub(
             r"(\w+)\.sum\s*\(([^)]*)\)",
-            r"tf.reduce_sum(\1, axis=\2)",
+            _replace_reduce("tf.reduce_sum"),
             source,
         )
 
@@ -1014,6 +1252,40 @@ class ModelConverter:
             source = re.sub(
                 r"(tf\.concat\s*\([^)]*),\s*axis\s*=\s*1\s*\)",
                 r"\1, axis=-1)",
+                source,
+            )
+
+            # Convert NCHW axis references in reduction ops to NHWC
+            # NCHW→NHWC axis mapping: 0→0, 1→3, 2→1, 3→2
+            nchw_to_nhwc_axis = {0: 0, 1: 3, 2: 1, 3: 2}
+
+            def _convert_reduction_axis(match: re.Match) -> str:
+                """Convert axis= values from NCHW to NHWC in reduction ops."""
+                prefix = match.group(1)
+                axis_val = match.group(2).strip()
+                # Handle tuple axis like (2, 3)
+                if axis_val.startswith("(") and axis_val.endswith(")"):
+                    inner = axis_val[1:-1]
+                    dims = [d.strip() for d in inner.split(",") if d.strip()]
+                    converted = []
+                    for d in dims:
+                        try:
+                            idx = int(d)
+                            converted.append(str(nchw_to_nhwc_axis.get(idx, idx)))
+                        except ValueError:
+                            converted.append(d)
+                    return f"{prefix}axis=({', '.join(converted)})"
+                # Handle single axis value
+                try:
+                    idx = int(axis_val)
+                    return f"{prefix}axis={nchw_to_nhwc_axis.get(idx, idx)}"
+                except ValueError:
+                    return match.group(0)
+
+            # Apply to tf.reduce_mean, tf.reduce_sum, tf.reduce_max, tf.reduce_min
+            source = re.sub(
+                r"(tf\.reduce_(?:mean|sum|max|min)\s*\([^)]*?)\baxis\s*=\s*(\([^)]+\)|\d+)",
+                _convert_reduction_axis,
                 source,
             )
 
