@@ -296,6 +296,21 @@ class ModelConverter:
         if "GroupNorm" in pt_layer:
             source = self._convert_groupnorm_params(source)
 
+        # Strip inplace= parameter from activation layers (TF has no inplace)
+        if any(act in pt_layer for act in ("ReLU", "LeakyReLU", "ELU", "PReLU",
+                                            "GELU", "SiLU", "Mish", "SELU")):
+            source = re.sub(
+                r"(" + re.escape(tf_layer) + r"\([^)]*?),?\s*inplace\s*=\s*(?:True|False)\s*",
+                r"\1",
+                source,
+            )
+            # Also clean up leading comma: Layer(inplace=True) → Layer()
+            source = re.sub(
+                r"(" + re.escape(tf_layer) + r"\()\s*inplace\s*=\s*(?:True|False)\s*,?\s*",
+                r"\1",
+                source,
+            )
+
         # In channels_first mode, pooling/upsampling layers also need data_format
         if self.channels_first and ("Pool" in pt_layer or "Upsamp" in pt_layer):
 
@@ -886,7 +901,8 @@ class ModelConverter:
             tf.pad(x, [[0,0], [top,bottom], [left,right], [0,0]], mode='REFLECT')
         """
         # Match F.pad calls with their full arguments
-        pattern = r"F\.pad\s*\(\s*(\w+)\s*,\s*\(([^)]*)\)(?:\s*,\s*([^)]*))?\)"
+        # Supports both tuple (1,1,1,1) and list [1,1,1,1] syntax
+        pattern = r"F\.pad\s*\(\s*(\w+)\s*,\s*[\(\[]([^\])]*)[\)\]](?:\s*,\s*([^)]*))?\)"
 
         def _replace_pad(match: re.Match) -> str:
             tensor_name = match.group(1)

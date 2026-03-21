@@ -80,7 +80,11 @@ def cmd_convert_weights(args: argparse.Namespace) -> None:
         print(f"TF model: {args.tf_model}")
 
         # Import and build TF model
-        tf_model = _load_tf_model(args.tf_model, args.input_shape)
+        tf_model = _load_tf_model(
+            args.tf_model, args.input_shape,
+            class_name=getattr(args, "tf_class_name", None),
+            model_args=getattr(args, "model_args", None),
+        )
 
         output_path = args.output or "converted_weights"
         stats = converter.convert(args.input, tf_model, output_path)
@@ -103,8 +107,16 @@ def cmd_validate(args: argparse.Namespace) -> None:
     )
 
     # Load models
-    pt_model = _load_pytorch_model(args.pt_model, args.pt_weights)
-    tf_model = _load_tf_model(args.tf_model, input_shapes[0], args.tf_weights)
+    pt_model = _load_pytorch_model(
+        args.pt_model, args.pt_weights,
+        class_name=getattr(args, "class_name", None),
+        model_args=getattr(args, "model_args", None),
+    )
+    tf_model = _load_tf_model(
+        args.tf_model, input_shapes[0], args.tf_weights,
+        class_name=getattr(args, "tf_class_name", None),
+        model_args=getattr(args, "model_args", None),
+    )
 
     print("Running validation...")
     result = validator.validate(
@@ -200,8 +212,15 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
     print("\n" + "=" * 60)
     print("Step 2: Converting weights...")
     print("=" * 60)
-    pt_model = _load_pytorch_model(args.pt_model, args.pt_weights)
-    tf_model = _load_tf_model(tf_model_path, input_shapes[0])
+    pt_model = _load_pytorch_model(
+        args.pt_model, args.pt_weights,
+        class_name=getattr(args, "class_name", None),
+        model_args=getattr(args, "model_args", None),
+    )
+    tf_model = _load_tf_model(
+        tf_model_path, input_shapes[0],
+        model_args=getattr(args, "model_args", None),
+    )
 
     weight_converter = WeightConverter(strict=False)
     tf_weights_path = str(output_dir / "weights")
@@ -247,8 +266,22 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
 # Helper functions
 # ────────────────────────────────────────
 
-def _load_pytorch_model(model_path: str, weights_path: str = None):
-    """Dynamically load a PyTorch model from a .py file."""
+def _load_pytorch_model(
+    model_path: str,
+    weights_path: str = None,
+    class_name: str = None,
+    model_args: str = None,
+):
+    """Dynamically load a PyTorch model from a .py file.
+
+    Args:
+        model_path: Path to the PyTorch model .py file.
+        weights_path: Optional path to .pth weights file.
+        class_name: Optional class name to use. If None, uses the first
+            nn.Module subclass found in the file.
+        model_args: Optional arguments string for model instantiation,
+            e.g. "num_classes=10, in_channels=3".
+    """
     import importlib.util
     import torch
 
@@ -256,22 +289,42 @@ def _load_pytorch_model(model_path: str, weights_path: str = None):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    # Find the model class (first nn.Module subclass)
+    # Find the model class
     model_cls = None
-    for name in dir(module):
-        obj = getattr(module, name)
-        if (
-            isinstance(obj, type)
-            and issubclass(obj, torch.nn.Module)
-            and obj is not torch.nn.Module
-        ):
-            model_cls = obj
-            break
+    if class_name:
+        # Use the specified class name
+        model_cls = getattr(module, class_name, None)
+        if model_cls is None:
+            available = [
+                name for name in dir(module)
+                if isinstance(getattr(module, name), type)
+                and issubclass(getattr(module, name), torch.nn.Module)
+                and getattr(module, name) is not torch.nn.Module
+            ]
+            raise ValueError(
+                f"Class '{class_name}' not found in {model_path}. "
+                f"Available nn.Module classes: {available}"
+            )
+    else:
+        # Auto-detect: use first nn.Module subclass
+        for name in dir(module):
+            obj = getattr(module, name)
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, torch.nn.Module)
+                and obj is not torch.nn.Module
+            ):
+                model_cls = obj
+                break
 
     if model_cls is None:
         raise ValueError(f"No nn.Module subclass found in {model_path}")
 
-    model = model_cls()
+    # Instantiate model with optional arguments
+    if model_args:
+        model = eval(f"model_cls({model_args})")
+    else:
+        model = model_cls()
 
     if weights_path:
         state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
@@ -286,8 +339,23 @@ def _load_pytorch_model(model_path: str, weights_path: str = None):
     return model
 
 
-def _load_tf_model(model_path: str, input_shape=None, weights_path: str = None):
-    """Dynamically load a TF model from a .py file."""
+def _load_tf_model(
+    model_path: str,
+    input_shape=None,
+    weights_path: str = None,
+    class_name: str = None,
+    model_args: str = None,
+):
+    """Dynamically load a TF model from a .py file.
+
+    Args:
+        model_path: Path to the TF model .py file.
+        input_shape: Input shape for building the model.
+        weights_path: Optional path to saved TF weights.
+        class_name: Optional class name to use. If None, uses the first
+            tf.keras.Model subclass found in the file.
+        model_args: Optional arguments string for model instantiation.
+    """
     import importlib.util
     import tensorflow as tf
 
@@ -297,20 +365,37 @@ def _load_tf_model(model_path: str, input_shape=None, weights_path: str = None):
 
     # Find the model class
     model_cls = None
-    for name in dir(module):
-        obj = getattr(module, name)
-        if (
-            isinstance(obj, type)
-            and issubclass(obj, tf.keras.Model)
-            and obj is not tf.keras.Model
-        ):
-            model_cls = obj
-            break
+    if class_name:
+        model_cls = getattr(module, class_name, None)
+        if model_cls is None:
+            available = [
+                name for name in dir(module)
+                if isinstance(getattr(module, name), type)
+                and issubclass(getattr(module, name), tf.keras.Model)
+                and getattr(module, name) is not tf.keras.Model
+            ]
+            raise ValueError(
+                f"Class '{class_name}' not found in {model_path}. "
+                f"Available tf.keras.Model classes: {available}"
+            )
+    else:
+        for name in dir(module):
+            obj = getattr(module, name)
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, tf.keras.Model)
+                and obj is not tf.keras.Model
+            ):
+                model_cls = obj
+                break
 
     if model_cls is None:
         raise ValueError(f"No tf.keras.Model subclass found in {model_path}")
 
-    model = model_cls()
+    if model_args:
+        model = eval(f"model_cls({model_args})")
+    else:
+        model = model_cls()
 
     # Build model with dummy input
     if input_shape:
@@ -365,6 +450,12 @@ def create_parser() -> argparse.ArgumentParser:
     p_weights.add_argument("--numpy-only", action="store_true", help="Export as numpy only")
     p_weights.add_argument("--no-strict", action="store_true", help="Non-strict weight matching")
 
+    # ── convert-weights ── (add class/args options)
+    p_weights.add_argument(
+        "--tf-class-name", help="TF model class name to use (default: auto-detect)")
+    p_weights.add_argument(
+        "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
+
     # ── validate ──
     p_val = subparsers.add_parser("validate", help="Validate PT↔TF output accuracy")
     p_val.add_argument("--pt-model", required=True, help="PyTorch model .py path")
@@ -376,6 +467,12 @@ def create_parser() -> argparse.ArgumentParser:
     p_val.add_argument("--atol", type=float, default=1e-5, help="Absolute tolerance")
     p_val.add_argument("--rtol", type=float, default=1e-4, help="Relative tolerance")
     p_val.add_argument("--cosine-threshold", type=float, default=0.9999)
+    p_val.add_argument(
+        "--class-name", help="PyTorch model class name to use (default: auto-detect)")
+    p_val.add_argument(
+        "--tf-class-name", help="TF model class name to use (default: auto-detect)")
+    p_val.add_argument(
+        "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10, in_channels=3'")
 
     # ── export ──
     p_export = subparsers.add_parser("export", help="Export TF model to PB format")
@@ -410,6 +507,10 @@ def create_parser() -> argparse.ArgumentParser:
         "--channels-first", action="store_true",
         help="Keep NCHW data format (matching PyTorch)",
     )
+    p_full.add_argument(
+        "--class-name", help="PyTorch model class name to use (default: auto-detect)")
+    p_full.add_argument(
+        "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
 
     return parser
 

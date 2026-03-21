@@ -715,7 +715,71 @@ class Net(nn.Module):
 
 
 # ────────────────────────────────────────
-# 12. Complex combined patterns
+# 12. ReLU with inplace=True
+# ────────────────────────────────────────
+
+register("ReLU(inplace=True)", """
+import torch
+import torch.nn as nn
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 8, 3, padding=1)
+        self.relu = nn.ReLU(inplace=True)
+    def forward(self, x):
+        return self.relu(self.conv(x))
+""", (3, 16, 16))
+
+register("LeakyReLU(inplace=True)", """
+import torch
+import torch.nn as nn
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 8, 3, padding=1)
+        self.act = nn.LeakyReLU(0.2, inplace=True)
+    def forward(self, x):
+        return self.act(self.conv(x))
+""", (3, 16, 16))
+
+
+# ────────────────────────────────────────
+# 13. F.pad with square brackets
+# ────────────────────────────────────────
+
+register("F.pad (square brackets)", """
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 8, 3)
+    def forward(self, x):
+        x = F.pad(x, [1, 1, 1, 1])
+        return self.conv(x)
+""", (3, 16, 16))
+
+register("F.pad (tuple)", """
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 8, 3)
+    def forward(self, x):
+        x = F.pad(x, (1, 1, 1, 1))
+        return self.conv(x)
+""", (3, 16, 16))
+
+
+# ────────────────────────────────────────
+# 14. Complex combined patterns
 # ────────────────────────────────────────
 
 register("Bottleneck block (1x1 + 3x3 + 1x1 + residual)", """
