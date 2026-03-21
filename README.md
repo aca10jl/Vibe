@@ -178,7 +178,31 @@ pytorch2tensorflow/
 ├── exporter.py          # PB 导出器（昇腾兼容）
 ├── cli.py               # 命令行接口
 └── examples/
-    └── example_resnet_block.py  # ResNet 转换示例
+    ├── example_resnet_block.py   # ResNet 转换示例
+    ├── demo_multi_models.py      # 多模型快速转换 Demo
+    ├── unet_model.py             # UNet PyTorch 模型定义
+    ├── validate_models.py        # 7 种架构端到端验证
+    └── verify_unet_conversion.py # UNet 完整流水线验证
+```
+
+## 已验证模型架构
+
+转换器已通过以下 7 种架构的端到端验证（代码转换 + 模型构建 + 输出形状对比）：
+
+| 模型 | 类型 | 关键特性 |
+|------|------|----------|
+| **UNet** | 语义分割 | Skip connections, `torch.cat`, `ConvTranspose2d` |
+| **SimpleResNet** | 图像分类 | 残差连接 (`+=`), `AdaptiveAvgPool2d`, `flatten` |
+| **LeNet** | 经典 CNN | `MaxPool2d`, 多层 `Linear` |
+| **MiniVGG** | VGG 风格 | 循环内构建 `Sequential`, `BatchNorm2d` + `ReLU` |
+| **MultiHeadNet** | 多任务 | 双输出头 (分类 + 回归), `tuple` 输出 |
+| **BottleneckNet** | ResNet-50 风格 | 1×1 → 3×3 → 1×1 瓶颈块, 下采样旁路 |
+| **EncoderDecoder** | 编解码器 | 编码-解码结构, skip connection, `ConvTranspose2d` |
+
+运行验证：
+
+```bash
+python -m pytorch2tensorflow.examples.validate_models
 ```
 
 ## 注意事项
