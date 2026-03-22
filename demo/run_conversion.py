@@ -51,9 +51,23 @@ def main():
     channels_first = args.channels_first
     mode_label = "NCHW (channels_first)" if channels_first else "NHWC (channels_last)"
 
+    # ──────────────────────────────────────────
+    # 核心参数 (模型构造 / 数据维度 / 验证配置)
+    # ──────────────────────────────────────────
+    in_channels = 3           # 输入通道数
+    num_classes = 2           # 输出类别数
+    base_features = 32        # 基础特征图通道数
+    input_shape = (in_channels, 128, 128)  # CHW 格式
+    batch_size = 1            # 推理批次大小
+    num_tests = 5             # 精度校验样本数
+    random_seed = 42          # 随机种子 (可复现)
+    cosine_threshold = 0.99   # 余弦相似度通过阈值
+
     print("=" * 70)
     print("  PyTorch UNet → TensorFlow 全流程转换")
     print(f"  数据格式: {mode_label}")
+    print(f"  模型参数: in_channels={in_channels}, num_classes={num_classes}, base_features={base_features}")
+    print(f"  输入形状: {input_shape} (CHW)")
     print("=" * 70)
 
     # 检查输入文件
@@ -73,7 +87,6 @@ def main():
         print(f"  权重已生成: {pt_weights_path}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    input_shape = (3, 128, 128)  # CHW
 
     # ──────────────────────────────────────────
     # Step 1: 转换模型代码
@@ -111,7 +124,7 @@ def main():
     sys.path.insert(0, str(PT_MODEL_DIR))
     from model import UNet as PyTorchUNet
 
-    pt_model = PyTorchUNet(in_channels=3, num_classes=2, base_features=32)
+    pt_model = PyTorchUNet(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
     state_dict = torch.load(str(pt_weights_path), map_location="cpu", weights_only=True)
     pt_model.load_state_dict(state_dict)
     pt_model.eval()
@@ -142,14 +155,14 @@ def main():
             tf_cls = obj
             break
 
-    tf_model = tf_cls(in_channels=3, num_classes=2, base_features=32)
+    tf_model = tf_cls(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
 
     # 构建模型
     c, h, w = input_shape
     if channels_first:
-        dummy = tf.zeros((1, c, h, w))   # NCHW
+        dummy = tf.zeros((batch_size, c, h, w))   # NCHW
     else:
-        dummy = tf.zeros((1, h, w, c))   # NHWC
+        dummy = tf.zeros((batch_size, h, w, c))   # NHWC
     tf_model(dummy, training=False)
 
     tf_param_count = sum(np.prod(v.shape) for v in tf_model.weights)
@@ -174,16 +187,14 @@ def main():
     print(f"\n{'─' * 70}")
     print("[Step 4/5] 校验 PyTorch <-> TensorFlow 输出精度 ...")
 
-    np.random.seed(42)
-    torch.manual_seed(42)
-
-    num_tests = 5
+    np.random.seed(random_seed)
+    torch.manual_seed(random_seed)
     all_max_abs = []
     all_cosine = []
 
     for i in range(num_tests):
         # 生成随机输入 (NCHW)
-        input_np = np.random.randn(1, 3, 128, 128).astype(np.float32)
+        input_np = np.random.randn(batch_size, c, h, w).astype(np.float32)
 
         # PyTorch 前向推理 (NCHW)
         with torch.no_grad():
@@ -215,7 +226,7 @@ def main():
 
     avg_cosine = np.mean(all_cosine)
     avg_max_abs = np.mean(all_max_abs)
-    passed = avg_cosine >= 0.99
+    passed = avg_cosine >= cosine_threshold
     status = "PASSED" if passed else "FAILED"
     print(f"\n  汇总 ({num_tests} 个样本):")
     print(f"    平均最大绝对差: {avg_max_abs:.2e}")
@@ -236,7 +247,7 @@ def main():
         str(OUTPUT_DIR),
         [input_shape],
         soc_version=args.soc_version,
-        batch_size=1,
+        batch_size=batch_size,
     )
 
     pb_path = export_results["frozen_graph_path"]
