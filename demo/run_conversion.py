@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
 """
-一键转换脚本：将 PyTorch UNet 模型转换为 TensorFlow 版本
+一键转换脚本：将 PyTorch UNet 模型转换为 TensorFlow 版本并导出 PB 模型
 
 用法:
     python demo/run_conversion.py
+    python demo/run_conversion.py --channels-first   # 保持 NCHW 格式
 
 输入文件 (demo/pytorch_model/):
     model.py          — PyTorch UNet 模型定义
     unet_weights.pth  — PyTorch 训练权重
 
 输出文件 (demo/output/):
-    model_tf.py       — 转换后的 TensorFlow 模型代码
+    model_tf.py        — 转换后的 TensorFlow 模型代码
     weights.weights.h5 — 转换后的 TensorFlow 权重
-    frozen_model.pb   — 冻结图 (昇腾部署用)
-    saved_model/      — TF SavedModel 格式
-    验证报告           — 精度校验结果
+    frozen_model.pb    — 冻结图 (昇腾部署用)
+    saved_model/       — TF SavedModel 格式
+    验证报告            — 精度校验结果
 """
 
+import argparse
+import ast
+import importlib.util
 import os
 import sys
 from pathlib import Path
+
+import numpy as np
 
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,8 +37,23 @@ OUTPUT_DIR = DEMO_DIR / "output"
 
 
 def main():
+    parser = argparse.ArgumentParser(description="PyTorch UNet → TensorFlow 全流程转换")
+    parser.add_argument(
+        "--channels-first", action="store_true",
+        help="保持 NCHW 数据格式 (匹配 PyTorch), TF 层使用 data_format='channels_first'",
+    )
+    parser.add_argument(
+        "--soc-version", default="Ascend910B4",
+        help="目标昇腾 SoC 型号 (默认: Ascend910B4)",
+    )
+    args = parser.parse_args()
+
+    channels_first = args.channels_first
+    mode_label = "NCHW (channels_first)" if channels_first else "NHWC (channels_last)"
+
     print("=" * 70)
     print("  PyTorch UNet → TensorFlow 全流程转换")
+    print(f"  数据格式: {mode_label}")
     print("=" * 70)
 
     # 检查输入文件
@@ -49,7 +70,7 @@ def main():
             [sys.executable, str(PT_MODEL_DIR / "generate_weights.py")],
             check=True,
         )
-        print(f"  ✓ 权重已生成: {pt_weights_path}")
+        print(f"  权重已生成: {pt_weights_path}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     input_shape = (3, 128, 128)  # CHW
@@ -61,13 +82,14 @@ def main():
     print("[Step 1/5] 转换 PyTorch 模型代码 → TensorFlow ...")
     from pytorch2tensorflow.converter import ModelConverter
 
-    converter = ModelConverter(add_channel_convert=True)
+    converter = ModelConverter(channels_first=channels_first)
     tf_model_path = OUTPUT_DIR / "model_tf.py"
     converted_code = converter.convert_file(str(pt_model_path), str(tf_model_path))
     line_count = converted_code.count("\n")
     print(f"  输出文件: {tf_model_path}")
     print(f"  代码行数: {line_count}")
-    print(f"  ✓ 模型代码转换完成")
+    print(f"  数据格式: {mode_label}")
+    print(f"  转换完成")
 
     # 展示关键转换片段
     print(f"\n  --- 转换后关键代码 ---")
@@ -75,9 +97,9 @@ def main():
         s = line.strip()
         if any(k in s for k in [
             "class UNet", "class DoubleConv", "class Down", "class Up",
-            "tf.pad(", "tf.concat(", "def call",
+            "tf.pad(", "tf.concat(", "def call", "data_format",
         ]):
-            print(f"  │ {line.rstrip()}")
+            print(f"  | {line.rstrip()}")
 
     # ──────────────────────────────────────────
     # Step 2: 加载 PyTorch 模型
@@ -85,6 +107,7 @@ def main():
     print(f"\n{'─' * 70}")
     print("[Step 2/5] 加载 PyTorch 模型 & 权重 ...")
     import torch
+
     sys.path.insert(0, str(PT_MODEL_DIR))
     from model import UNet as PyTorchUNet
 
@@ -95,7 +118,7 @@ def main():
 
     param_count = sum(p.numel() for p in pt_model.parameters())
     print(f"  参数量:   {param_count:,}")
-    print(f"  ✓ PyTorch 模型加载完成")
+    print(f"  PyTorch 模型加载完成")
 
     # ──────────────────────────────────────────
     # Step 3: 构建 TF 模型 & 转换权重
@@ -103,16 +126,34 @@ def main():
     print(f"\n{'─' * 70}")
     print("[Step 3/5] 构建 TensorFlow 模型 & 转换权重 ...")
     import tensorflow as tf
-    import numpy as np
 
-    tf_model = _build_tf_unet()
+    # 使用自动转换的代码加载 TF 模型
+    spec = importlib.util.spec_from_file_location("tf_model", str(tf_model_path))
+    tf_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tf_mod)
 
-    # 用 dummy input 构建模型
-    dummy = tf.zeros((1, 128, 128, 3))  # NHWC
-    _ = tf_model(dummy, training=False)
+    # 找到主模型类 (最后一个 tf.keras.Model 子类)
+    tree = ast.parse(converted_code)
+    tf_cls_names = [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
+    tf_cls = None
+    for cname in reversed(tf_cls_names):
+        obj = getattr(tf_mod, cname, None)
+        if obj and isinstance(obj, type) and issubclass(obj, tf.keras.Model):
+            tf_cls = obj
+            break
 
-    tf_param_count = sum(np.prod(w.shape) for w in tf_model.weights)
-    print(f"  TF 参数量: {tf_param_count:,}")
+    tf_model = tf_cls(in_channels=3, num_classes=2, base_features=32)
+
+    # 构建模型
+    c, h, w = input_shape
+    if channels_first:
+        dummy = tf.zeros((1, c, h, w))   # NCHW
+    else:
+        dummy = tf.zeros((1, h, w, c))   # NHWC
+    tf_model(dummy, training=False)
+
+    tf_param_count = sum(np.prod(v.shape) for v in tf_model.weights)
+    print(f"  TF 参数量: {int(tf_param_count):,}")
 
     # 权重转换
     from pytorch2tensorflow.weight_converter import WeightConverter
@@ -125,13 +166,13 @@ def main():
     )
     print(f"  权重映射: {stats['assigned']}/{stats['total_pytorch_weights']} 成功")
     print(f"  权重文件: {tf_weights_path}")
-    print(f"  ✓ 权重转换完成")
+    print(f"  权重转换完成")
 
     # ──────────────────────────────────────────
     # Step 4: 精度校验
     # ──────────────────────────────────────────
     print(f"\n{'─' * 70}")
-    print("[Step 4/5] 校验 PyTorch ↔ TensorFlow 输出精度 ...")
+    print("[Step 4/5] 校验 PyTorch <-> TensorFlow 输出精度 ...")
 
     np.random.seed(42)
     torch.manual_seed(42)
@@ -141,17 +182,21 @@ def main():
     all_cosine = []
 
     for i in range(num_tests):
-        # 生成随机输入
+        # 生成随机输入 (NCHW)
         input_np = np.random.randn(1, 3, 128, 128).astype(np.float32)
 
         # PyTorch 前向推理 (NCHW)
         with torch.no_grad():
             pt_out = pt_model(torch.from_numpy(input_np)).numpy()
 
-        # TF 前向推理 (NHWC)
-        input_nhwc = np.transpose(input_np, (0, 2, 3, 1))
-        tf_out = tf_model(tf.constant(input_nhwc), training=False).numpy()
-        tf_out_nchw = np.transpose(tf_out, (0, 3, 1, 2))
+        # TF 前向推理
+        if channels_first:
+            tf_out = tf_model(tf.constant(input_np), training=False).numpy()
+            tf_out_nchw = tf_out
+        else:
+            input_nhwc = np.transpose(input_np, (0, 2, 3, 1))
+            tf_out = tf_model(tf.constant(input_nhwc), training=False).numpy()
+            tf_out_nchw = np.transpose(tf_out, (0, 3, 1, 2))
 
         # 计算指标
         abs_diff = np.abs(pt_out - tf_out_nchw)
@@ -175,7 +220,7 @@ def main():
     print(f"\n  汇总 ({num_tests} 个样本):")
     print(f"    平均最大绝对差: {avg_max_abs:.2e}")
     print(f"    平均余弦相似度: {avg_cosine:.6f}")
-    print(f"  ✓ 精度校验: {status}")
+    print(f"  精度校验: {status}")
 
     # ──────────────────────────────────────────
     # Step 5: 导出 PB 模型
@@ -184,36 +229,30 @@ def main():
     print("[Step 5/5] 导出 PB 模型 (昇腾部署) ...")
     from pytorch2tensorflow.exporter import PBExporter
 
-    exporter = PBExporter()
+    exporter = PBExporter(channels_first=channels_first)
 
-    # 导出 SavedModel
-    saved_model_dir = str(OUTPUT_DIR / "saved_model")
-    exporter.export_saved_model(tf_model, saved_model_dir, input_shapes=[(128, 128, 3)])
-    print(f"  SavedModel: {saved_model_dir}")
+    export_results = exporter.export_and_verify(
+        tf_model,
+        str(OUTPUT_DIR),
+        [input_shape],
+        soc_version=args.soc_version,
+        batch_size=1,
+    )
 
-    # 导出 Frozen Graph
-    pb_path = str(OUTPUT_DIR / "frozen_model.pb")
-    exporter.export_frozen_graph(tf_model, pb_path, input_shapes=[(128, 128, 3)])
+    pb_path = export_results["frozen_graph_path"]
     pb_size = os.path.getsize(pb_path)
+    print(f"  SavedModel: {export_results['saved_model_dir']}")
     print(f"  Frozen PB:  {pb_path} ({pb_size/1024:.0f} KB)")
 
-    # 昇腾兼容性检查
-    compat = exporter.check_ascend_compatibility(pb_path=pb_path)
+    compat = export_results["ascend_compatibility"]
     compat_status = "兼容" if compat["compatible"] else "存在问题"
     print(f"  昇腾兼容:  {compat_status} (算子: {compat['unique_ops']} 种)")
 
     if compat["unsupported_ops"]:
         print(f"  未知算子:  {compat['unsupported_ops']}")
 
-    # 生成 ATC 命令
-    atc_cmd = exporter.generate_atc_command(
-        pb_path=pb_path,
-        output_path=str(OUTPUT_DIR / "unet_model"),
-        soc_version="Ascend310",
-        input_shape="input:1,128,128,3",
-    )
     print(f"\n  ATC 转换命令 (在昇腾环境执行):")
-    for line in atc_cmd.split("\n"):
+    for line in export_results["atc_command"].split("\n"):
         print(f"    {line}")
 
     # ──────────────────────────────────────────
@@ -228,89 +267,12 @@ def main():
     print(f"  ├── frozen_model.pb      冻结图 (PB 格式)")
     print(f"  └── saved_model/         SavedModel 格式")
     print(f"")
+    print(f"  数据格式:  {mode_label}")
     print(f"  精度验证:  {status} (余弦相似度={avg_cosine:.6f})")
     print(f"  昇腾兼容:  {compat_status}")
     print(f"{'=' * 70}")
 
     return 0 if passed else 1
-
-
-def _build_tf_unet():
-    """构建与 PyTorch 版本对应的 TensorFlow UNet 模型."""
-    import tensorflow as tf
-
-    class TFDoubleConv(tf.keras.layers.Layer):
-        def __init__(self, out_channels, **kwargs):
-            super().__init__(**kwargs)
-            self.conv1 = tf.keras.layers.Conv2D(
-                out_channels, 3, padding="same", use_bias=False)
-            self.bn1 = tf.keras.layers.BatchNormalization()
-            self.conv2 = tf.keras.layers.Conv2D(
-                out_channels, 3, padding="same", use_bias=False)
-            self.bn2 = tf.keras.layers.BatchNormalization()
-
-        def call(self, x, training=False):
-            x = tf.nn.relu(self.bn1(self.conv1(x), training=training))
-            x = tf.nn.relu(self.bn2(self.conv2(x), training=training))
-            return x
-
-    class TFDown(tf.keras.layers.Layer):
-        def __init__(self, out_channels, **kwargs):
-            super().__init__(**kwargs)
-            self.pool = tf.keras.layers.MaxPool2D(2)
-            self.conv = TFDoubleConv(out_channels)
-
-        def call(self, x, training=False):
-            return self.conv(self.pool(x), training=training)
-
-    class TFUp(tf.keras.layers.Layer):
-        def __init__(self, in_channels, out_channels, **kwargs):
-            super().__init__(**kwargs)
-            self.up = tf.keras.layers.Conv2DTranspose(
-                in_channels // 2, kernel_size=2, strides=2)
-            self.conv = TFDoubleConv(out_channels)
-
-        def call(self, x1, x2, training=False):
-            x1 = self.up(x1)
-            # 对齐空间维度 (NHWC)
-            diff_h = tf.shape(x2)[1] - tf.shape(x1)[1]
-            diff_w = tf.shape(x2)[2] - tf.shape(x1)[2]
-            x1 = tf.pad(x1, [
-                [0, 0],
-                [diff_h // 2, diff_h - diff_h // 2],
-                [diff_w // 2, diff_w - diff_w // 2],
-                [0, 0]
-            ])
-            x = tf.concat([x2, x1], axis=-1)
-            return self.conv(x, training=training)
-
-    class TFUNet(tf.keras.Model):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self.inc = TFDoubleConv(32, name="inc")
-            self.down1 = TFDown(64, name="down1")
-            self.down2 = TFDown(128, name="down2")
-            self.down3 = TFDown(256, name="down3")
-            self.down4 = TFDown(512, name="down4")
-            self.up1 = TFUp(512, 256, name="up1")
-            self.up2 = TFUp(256, 128, name="up2")
-            self.up3 = TFUp(128, 64, name="up3")
-            self.up4 = TFUp(64, 32, name="up4")
-            self.outc = tf.keras.layers.Conv2D(2, 1, name="outc")
-
-        def call(self, x, training=False):
-            x1 = self.inc(x, training=training)
-            x2 = self.down1(x1, training=training)
-            x3 = self.down2(x2, training=training)
-            x4 = self.down3(x3, training=training)
-            x5 = self.down4(x4, training=training)
-            x = self.up1(x5, x4, training=training)
-            x = self.up2(x, x3, training=training)
-            x = self.up3(x, x2, training=training)
-            x = self.up4(x, x1, training=training)
-            return self.outc(x)
-
-    return TFUNet()
 
 
 if __name__ == "__main__":

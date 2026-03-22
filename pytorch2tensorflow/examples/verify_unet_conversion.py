@@ -199,7 +199,7 @@ def main():
         atc_cmd = exporter.generate_atc_command(
             pb_path=pb_path,
             output_path=str(work_dir / "unet_model"),
-            soc_version="Ascend310",
+            soc_version="Ascend910B4",
             input_shape="input:1,128,128,3",
         )
         for line in atc_cmd.split("\n"):

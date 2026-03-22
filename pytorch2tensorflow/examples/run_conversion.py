@@ -328,7 +328,7 @@ def main():
         atc_cmd = exporter.generate_atc_command(
             pb_path=pb_path,
             output_path=str(work_dir / "model_ascend"),
-            soc_version="Ascend310",
+            soc_version="Ascend910B4",
             input_shape=f"input:1,{h},{w},{c}",
         )
         for line in atc_cmd.split("\n"):
