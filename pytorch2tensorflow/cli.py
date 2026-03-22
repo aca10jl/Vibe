@@ -219,8 +219,9 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
     print("\n" + "=" * 60)
     print("Step 2: Converting weights...")
     print("=" * 60)
+    pt_weights = getattr(args, "pt_weights", None)
     pt_model = _load_pytorch_model(
-        args.pt_model, args.pt_weights,
+        args.pt_model, pt_weights,
         class_name=getattr(args, "class_name", None),
         model_args=getattr(args, "model_args", None),
     )
@@ -232,7 +233,13 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
 
     weight_converter = WeightConverter(strict=False)
     tf_weights_path = str(output_dir / "weights")
-    stats = weight_converter.convert(args.pt_weights, tf_model, tf_weights_path)
+    if pt_weights:
+        stats = weight_converter.convert(pt_weights, tf_model, tf_weights_path)
+    else:
+        print("  No weights file provided, using random initialization")
+        stats = weight_converter.convert_from_state_dict(
+            pt_model.state_dict(), tf_model, tf_weights_path,
+        )
     print(f"  Assigned: {stats['assigned']}/{stats['total_pytorch_weights']}")
 
     # Step 3: Validate accuracy
@@ -523,7 +530,7 @@ def create_parser() -> argparse.ArgumentParser:
     # ── full ──
     p_full = subparsers.add_parser("full", help="Run complete conversion pipeline")
     p_full.add_argument("--pt-model", required=True, help="PyTorch model .py path")
-    p_full.add_argument("--pt-weights", required=True, help="PyTorch weights .pth path")
+    p_full.add_argument("--pt-weights", help="PyTorch weights .pth path (random init if omitted)")
     p_full.add_argument("--input-shape", nargs="+", required=True, help="Input shapes")
     p_full.add_argument("-o", "--output", help="Output directory")
     p_full.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")

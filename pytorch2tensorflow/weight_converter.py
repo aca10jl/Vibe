@@ -118,6 +118,58 @@ class WeightConverter:
 
         return stats
 
+    def convert_from_state_dict(
+        self,
+        state_dict: dict,
+        tf_model,
+        output_path: Optional[str] = None,
+        name_mapping: Optional[dict] = None,
+    ) -> dict:
+        """Convert weights from an in-memory PyTorch state_dict to TF model.
+
+        Useful when no .pth file exists (e.g. random-initialized model).
+
+        Args:
+            state_dict: PyTorch model state_dict (OrderedDict of str→Tensor).
+            tf_model: A built tf.keras.Model instance to load weights into.
+            output_path: Optional path to save converted weights.
+            name_mapping: Optional custom name mapping overrides.
+
+        Returns:
+            Dictionary with conversion statistics and details.
+        """
+        self._conversion_log.clear()
+
+        # Convert tensors to numpy
+        import torch
+        np_state_dict = {
+            k: v.detach().cpu().numpy() if isinstance(v, torch.Tensor) else v
+            for k, v in state_dict.items()
+        }
+
+        mapping = self._build_name_mapping(np_state_dict, tf_model, name_mapping)
+
+        matched_count = sum(1 for v in mapping.values() if v is not None)
+        total_mappable = sum(
+            1 for k in np_state_dict
+            if not any(skip in k for skip in self.SKIP_KEYS)
+        )
+
+        if matched_count < total_mappable * 0.5:
+            logger.info(
+                "Name-based mapping found only %d/%d matches, "
+                "falling back to structural matching",
+                matched_count, total_mappable,
+            )
+            stats = self._assign_weights_structural(np_state_dict, tf_model)
+        else:
+            stats = self._assign_weights(np_state_dict, tf_model, mapping)
+
+        if output_path:
+            self._save_tf_weights(tf_model, output_path)
+
+        return stats
+
     def convert_state_dict_to_numpy(
         self,
         pytorch_path: str,
