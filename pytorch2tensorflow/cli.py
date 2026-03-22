@@ -147,16 +147,19 @@ def cmd_export(args: argparse.Namespace) -> None:
     )
 
     output_dir = args.output or "export_output"
+    batch_size = getattr(args, "batch_size", 1) or 1
     results = exporter.export_and_verify(
         tf_model,
         output_dir,
         input_shapes,
         soc_version=args.soc_version,
+        batch_size=batch_size,
     )
 
     print(f"\nExport Results:")
     print(f"  SavedModel:    {results['saved_model_dir']}")
     print(f"  Frozen Graph:  {results['frozen_graph_path']}")
+    print(f"  Batch Size:    {batch_size}")
     print(f"  Ascend Compat: {'PASS' if results['ascend_compatibility']['compatible'] else 'FAIL'}")
     print(f"\nATC Command:")
     print(f"  {results['atc_command']}")
@@ -245,11 +248,13 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
     print("Step 4: Exporting to PB...")
     print("=" * 60)
     exporter = PBExporter()
+    batch_size = getattr(args, "batch_size", 1) or 1
     export_results = exporter.export_and_verify(
         tf_model,
         str(output_dir / "export"),
         input_shapes,
         soc_version=args.soc_version,
+        batch_size=batch_size,
     )
     print(f"  Frozen Graph:  {export_results['frozen_graph_path']}")
     print(f"  Ascend Compat: {'PASS' if export_results['ascend_compatibility']['compatible'] else 'FAIL'}")
@@ -490,6 +495,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--tf-class-name", help="TF model class name to use (default: auto-detect)")
     p_export.add_argument(
         "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
+    p_export.add_argument(
+        "--batch-size", type=int, default=1,
+        help="Batch size (N) for export. Default: 1")
 
     # ── auto ──
     p_auto = subparsers.add_parser(
@@ -508,6 +516,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--class-name", help="PyTorch model class name to use (default: auto-detect)")
     p_auto.add_argument(
         "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
+    p_auto.add_argument(
+        "--batch-size", type=int, default=1,
+        help="Batch size (N) for export. Default: 1")
 
     # ── full ──
     p_full = subparsers.add_parser("full", help="Run complete conversion pipeline")
@@ -524,6 +535,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--class-name", help="PyTorch model class name to use (default: auto-detect)")
     p_full.add_argument(
         "--model-args", help="Model instantiation arguments, e.g. 'num_classes=10'")
+    p_full.add_argument(
+        "--batch-size", type=int, default=1,
+        help="Batch size (N) for export. Default: 1")
 
     return parser
 

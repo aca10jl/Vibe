@@ -108,6 +108,7 @@ class PBExporter:
         tf_model,
         output_dir: str,
         input_shapes: Optional[list[tuple]] = None,
+        batch_size: Optional[int] = None,
     ) -> str:
         """Export TF model as SavedModel directory.
 
@@ -115,6 +116,7 @@ class PBExporter:
             tf_model: A tf.keras.Model instance.
             output_dir: Directory to save the SavedModel.
             input_shapes: Optional concrete input shapes for tracing.
+            batch_size: Batch dimension. None means dynamic batch.
 
         Returns:
             Path to the SavedModel directory.
@@ -127,7 +129,7 @@ class PBExporter:
         if input_shapes:
             # Create concrete function with fixed input shapes
             input_specs = [
-                tf.TensorSpec(shape=(None, *shape), dtype=tf.float32)
+                tf.TensorSpec(shape=(batch_size, *shape), dtype=tf.float32)
                 for shape in input_shapes
             ]
 
@@ -153,6 +155,7 @@ class PBExporter:
         tf_model,
         output_path: str,
         input_shapes: Optional[list[tuple]] = None,
+        batch_size: int = 1,
     ) -> str:
         """Export TF model as a frozen graph (.pb file).
 
@@ -162,6 +165,7 @@ class PBExporter:
             tf_model: A tf.keras.Model instance.
             output_path: Path for the output .pb file.
             input_shapes: Input shapes for tracing (without batch dim).
+            batch_size: Batch dimension for the frozen graph.
 
         Returns:
             Path to the frozen .pb file.
@@ -174,7 +178,7 @@ class PBExporter:
         # Get concrete function
         if input_shapes:
             input_specs = [
-                tf.TensorSpec(shape=(1, *shape), dtype=tf.float32)
+                tf.TensorSpec(shape=(batch_size, *shape), dtype=tf.float32)
                 for shape in input_shapes
             ]
         else:
@@ -359,6 +363,7 @@ class PBExporter:
         output_dir: str,
         input_shapes: list[tuple],
         soc_version: str = "Ascend310",
+        batch_size: int = 1,
     ) -> dict:
         """Full pipeline: export + compatibility check + ATC command.
 
@@ -367,6 +372,7 @@ class PBExporter:
             output_dir: Directory for all output files.
             input_shapes: Input shapes (without batch dim).
             soc_version: Target Ascend SoC version.
+            batch_size: Batch dimension for export.
 
         Returns:
             Dict with all export results.
@@ -374,18 +380,20 @@ class PBExporter:
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
 
-        # Export SavedModel
+        # Export SavedModel (use None for dynamic batch in SavedModel)
         saved_model_dir = self.export_saved_model(
             tf_model,
             str(out_path / "saved_model"),
             input_shapes,
+            batch_size=None,
         )
 
-        # Export Frozen Graph
+        # Export Frozen Graph (use specified batch_size)
         pb_path = self.export_frozen_graph(
             tf_model,
             str(out_path / "frozen_model.pb"),
             input_shapes,
+            batch_size=batch_size,
         )
 
         # Check Ascend compatibility
@@ -401,12 +409,12 @@ class PBExporter:
             name = input_node_names[idx] if idx < len(input_node_names) else f"input_{idx}"
             if self.channels_first:
                 # Keep NCHW as-is
-                shape_str = ",".join(str(d) for d in (1, *shape))
+                shape_str = ",".join(str(d) for d in (batch_size, *shape))
             elif len(shape) == 3:
                 # CHW → HWC for NHWC mode
-                shape_str = f"1,{shape[1]},{shape[2]},{shape[0]}"
+                shape_str = f"{batch_size},{shape[1]},{shape[2]},{shape[0]}"
             else:
-                shape_str = ",".join(str(d) for d in (1, *shape))
+                shape_str = ",".join(str(d) for d in (batch_size, *shape))
             shape_parts.append(f"{name}:{shape_str}")
 
         atc_input_shape = ";".join(shape_parts)
