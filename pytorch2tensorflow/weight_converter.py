@@ -196,7 +196,7 @@ class WeightConverter:
             if any(skip in name for skip in self.SKIP_KEYS):
                 continue
 
-            np_array = tensor.cpu().numpy()
+            np_array = tensor.cpu().numpy() if hasattr(tensor, 'cpu') else np.asarray(tensor)
 
             # Determine transpose rule
             new_name = self._convert_weight_name(name)
@@ -374,7 +374,7 @@ class WeightConverter:
                 continue
 
             tf_var = tf_weights[tf_name]
-            np_array = tensor.cpu().numpy()
+            np_array = tensor.cpu().numpy() if hasattr(tensor, 'cpu') else np.asarray(tensor)
 
             # Apply transpose if needed
             transpose_rule = self._get_transpose_rule(pt_name, np_array)
@@ -499,7 +499,7 @@ class WeightConverter:
         for name, tensor in state_dict.items():
             if any(skip in name for skip in self.SKIP_KEYS):
                 continue
-            np_array = tensor.cpu().numpy()
+            np_array = tensor.cpu().numpy() if hasattr(tensor, 'cpu') else np.asarray(tensor)
             role = self._classify_weight_role(
                 name, np_array, bn_prefixes, conv_transpose_prefixes)
             pt_weights.append((name, np_array, role))
