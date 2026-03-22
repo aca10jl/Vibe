@@ -262,8 +262,7 @@ demo/
 ├── run_conversion.py             # 一键转换脚本 (支持 --channels-first)
 ├── pytorch_model/
 │   ├── model.py                  # PyTorch UNet 模型
-│   ├── generate_weights.py       # 权重生成脚本
-│   └── unet_weights.pth          # PyTorch 权重
+│   └── unet_weights.pth          # PyTorch 权重 (无则自动初始化)
 └── output/                       # 转换输出
     ├── model_tf.py               # TF 模型代码
     ├── weights.weights.h5        # TF 权重
