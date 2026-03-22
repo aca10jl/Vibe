@@ -99,6 +99,20 @@ class PBExporter:
         self.opset_version = opset_version
         self.channels_first = channels_first
 
+    def _to_nhwc_shape(self, shape: tuple) -> tuple:
+        """Convert a CHW/CL shape to HWC/LC for NHWC mode.
+
+        Handles:
+          - 2D (C, L) → (L, C)         for Conv1d
+          - 3D (C, H, W) → (H, W, C)   for Conv2d
+          - 4D (C, D, H, W) → (D, H, W, C) for Conv3d
+          - 1D or channels_first: returned as-is
+        """
+        if self.channels_first or len(shape) <= 1:
+            return shape
+        # Move first dim (channels) to last
+        return (*shape[1:], shape[0])
+
     # ────────────────────────────────────────
     # Public API
     # ────────────────────────────────────────
@@ -128,19 +142,32 @@ class PBExporter:
 
         if input_shapes:
             # Create concrete function with fixed input shapes
+            nhwc_shapes = [self._to_nhwc_shape(s) for s in input_shapes]
+
             input_specs = [
-                tf.TensorSpec(shape=(batch_size, *shape), dtype=tf.float32)
-                for shape in input_shapes
+                tf.TensorSpec(shape=(batch_size, *s), dtype=tf.float32)
+                for s in nhwc_shapes
             ]
 
             @tf.function(input_signature=input_specs)
             def serving_fn(*inputs):
                 if len(inputs) == 1:
-                    return tf_model(inputs[0], training=False)
-                return tf_model(inputs, training=False)
+                    out = tf_model(inputs[0], training=False)
+                else:
+                    out = tf_model(inputs, training=False)
+                # Convert tuple/list outputs to dict for SavedModel signatures
+                if isinstance(out, (tuple, list)):
+                    return {f"output_{i}": o for i, o in enumerate(out)}
+                return out
+
+            # Wrap in a plain tf.Module to avoid Keras auto-tracing
+            # submodules with multi-arg call() (e.g. UNet's Up(x1, x2))
+            wrapper = tf.Module()
+            wrapper._model_vars = tf_model.variables
+            wrapper.serve = serving_fn
 
             tf.saved_model.save(
-                tf_model,
+                wrapper,
                 str(output_path),
                 signatures={"serving_default": serving_fn},
             )
@@ -177,17 +204,26 @@ class PBExporter:
 
         # Get concrete function
         if input_shapes:
+            nhwc_shapes = [self._to_nhwc_shape(s) for s in input_shapes]
+
             input_specs = [
-                tf.TensorSpec(shape=(batch_size, *shape), dtype=tf.float32)
-                for shape in input_shapes
+                tf.TensorSpec(shape=(batch_size, *s), dtype=tf.float32)
+                for s in nhwc_shapes
             ]
         else:
             input_specs = None
 
+        def _model_fn(x):
+            out = tf_model(x, training=False)
+            # Convert tuple/list to dict so each output gets a named node
+            if isinstance(out, (tuple, list)):
+                return {f"output_{i}": o for i, o in enumerate(out)}
+            return out
+
         if input_specs:
             if len(input_specs) == 1:
                 concrete_fn = tf.function(
-                    lambda x: tf_model(x, training=False)
+                    _model_fn
                 ).get_concrete_function(input_specs[0])
             else:
                 concrete_fn = tf.function(
@@ -195,7 +231,7 @@ class PBExporter:
                 ).get_concrete_function(*input_specs)
         else:
             concrete_fn = tf.function(
-                lambda x: tf_model(x, training=False)
+                _model_fn
             ).get_concrete_function(
                 tf.TensorSpec(shape=tf_model.input_shape, dtype=tf.float32)
             )
@@ -250,9 +286,10 @@ class PBExporter:
                 graph_def.ParseFromString(f.read())
         elif tf_model:
             if input_shapes:
+                nhwc_shapes = [self._to_nhwc_shape(s) for s in input_shapes]
                 input_specs = [
-                    tf.TensorSpec(shape=(1, *shape), dtype=tf.float32)
-                    for shape in input_shapes
+                    tf.TensorSpec(shape=(1, *s), dtype=tf.float32)
+                    for s in nhwc_shapes
                 ]
                 concrete_fn = tf.function(
                     lambda x: tf_model(x, training=False)
@@ -407,14 +444,8 @@ class PBExporter:
         shape_parts = []
         for idx, shape in enumerate(input_shapes):
             name = input_node_names[idx] if idx < len(input_node_names) else f"input_{idx}"
-            if self.channels_first:
-                # Keep NCHW as-is
-                shape_str = ",".join(str(d) for d in (batch_size, *shape))
-            elif len(shape) == 3:
-                # CHW → HWC for NHWC mode
-                shape_str = f"{batch_size},{shape[1]},{shape[2]},{shape[0]}"
-            else:
-                shape_str = ",".join(str(d) for d in (batch_size, *shape))
+            nhwc = self._to_nhwc_shape(shape)
+            shape_str = ",".join(str(d) for d in (batch_size, *nhwc))
             shape_parts.append(f"{name}:{shape_str}")
 
         atc_input_shape = ";".join(shape_parts)

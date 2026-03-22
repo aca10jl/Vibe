@@ -200,14 +200,41 @@ def convert_and_compare(
         avg_mad = float(np.mean(max_abs_diffs))
         passed = avg_cos >= COSINE_THRESHOLD and avg_mad <= MAX_ABS_DIFF_THRESHOLD
 
+        # PB export test: export frozen graph and verify it loads
+        pb_ok = False
+        pb_error = None
+        try:
+            from pytorch2tensorflow.exporter import PBExporter
+            exporter = PBExporter()
+            nhwc_shape = (input_shape[1], input_shape[2], input_shape[0]) if len(input_shape) == 3 else input_shape
+            pb_path = str(Path(tmpdir) / "frozen.pb")
+            exporter.export_frozen_graph(
+                tf_model, pb_path, [input_shape], batch_size=1,
+            )
+            # Verify PB can be loaded
+            graph_def = tf.compat.v1.GraphDef()
+            with open(pb_path, "rb") as f:
+                graph_def.ParseFromString(f.read())
+            if len(graph_def.node) > 0:
+                pb_ok = True
+        except Exception as e:
+            pb_error = str(e)
+
+        if not pb_ok:
+            passed = False
+
         return {
             "passed": passed,
             "cosine_sim": avg_cos,
             "max_abs_diff": avg_mad,
-            "error": None if passed else (
-                f"cosine={avg_cos:.6f} (<{COSINE_THRESHOLD})"
-                if avg_cos < COSINE_THRESHOLD
-                else f"max_abs_diff={avg_mad:.6e} (>{MAX_ABS_DIFF_THRESHOLD})"
+            "pb_export": pb_ok,
+            "error": (
+                None if passed else (
+                    f"PB export failed: {pb_error}" if not pb_ok
+                    else f"cosine={avg_cos:.6f} (<{COSINE_THRESHOLD})"
+                    if avg_cos < COSINE_THRESHOLD
+                    else f"max_abs_diff={avg_mad:.6e} (>{MAX_ABS_DIFF_THRESHOLD})"
+                )
             ),
         }
 

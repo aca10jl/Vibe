@@ -517,7 +517,38 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
         result["weights_total"] = "?"
         result["weights_skipped"] = f"error: {e}"
 
-    # Step 6: Multi-sample inference comparison with detailed metrics
+    # Step 6: Export to PB (SavedModel + FrozenGraph) and Ascend compat check
+    from pytorch2tensorflow.exporter import PBExporter
+
+    exporter = PBExporter()
+    export_dir = str(Path(tmpdir) / "export")
+    try:
+        nhwc_shape = (input_shape[1], input_shape[2], input_shape[0])
+        export_results = exporter.export_and_verify(
+            tf_model,
+            export_dir,
+            [input_shape],
+            batch_size=1,
+        )
+        result["pb_export"] = "OK"
+        result["pb_path"] = export_results["frozen_graph_path"]
+        result["pb_nodes"] = export_results["ascend_compatibility"]["total_nodes"]
+        result["pb_unsupported_ops"] = export_results["ascend_compatibility"]["unsupported_ops"]
+        result["ascend_compatible"] = export_results["ascend_compatibility"]["compatible"]
+
+        # Verify frozen graph can be loaded and produce output
+        pb_path = export_results["frozen_graph_path"]
+        graph_def = tf.compat.v1.GraphDef()
+        with open(pb_path, "rb") as f:
+            graph_def.ParseFromString(f.read())
+
+        result["pb_verified"] = True
+    except Exception as e:
+        result["pb_export"] = f"FAIL: {e}"
+        result["pb_verified"] = False
+        result["ascend_compatible"] = False
+
+    # Step 7: Multi-sample inference comparison with detailed metrics
     np.random.seed(42)
     torch.manual_seed(42)
 
@@ -580,6 +611,10 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
             m["max_abs_diff"] <= MAX_ABS_DIFF_THRESHOLD,
         "mean_abs_diff <= {:.4f}".format(MEAN_ABS_DIFF_THRESHOLD):
             m["mean_abs_diff"] <= MEAN_ABS_DIFF_THRESHOLD,
+        "pb_export":
+            result.get("pb_export") == "OK",
+        "pb_load_verify":
+            result.get("pb_verified", False),
     }
     result["checks"] = checks
     result["passed"] = all(checks.values())
@@ -649,6 +684,19 @@ def main():
                 print(f"  Weights transfer:  {wa}/{wt} assigned, {ws} skipped")
                 print(f"  Output shape (PT): {result.get('pt_output_shape')}")
                 print(f"  Output shape (TF): {result.get('tf_output_shape')}")
+
+                # PB export results
+                pb_status = result.get("pb_export", "SKIP")
+                print(f"  PB export:         {pb_status}")
+                if pb_status == "OK":
+                    print(f"  PB graph nodes:    {result.get('pb_nodes', '?')}")
+                    unsup = result.get("pb_unsupported_ops", [])
+                    if unsup:
+                        print(f"  Unsupported ops:   {unsup}")
+                    ascend = result.get("ascend_compatible", False)
+                    print(f"  Ascend compat:     {'PASS' if ascend else 'FAIL'}")
+                    print(f"  PB load verify:    {'OK' if result.get('pb_verified') else 'FAIL'}")
+
                 print()
                 print_metrics(m, result["per_sample"])
 
