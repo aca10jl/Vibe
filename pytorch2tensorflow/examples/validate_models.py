@@ -427,7 +427,7 @@ MODELS = [
 ]
 
 
-def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
+def test_model_conversion(model_config: dict, tmpdir: str, channels_first: bool = False) -> dict:
     """Test a single model through the full conversion pipeline with metrics."""
     import torch
     import tensorflow as tf
@@ -445,7 +445,7 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
     pt_path.write_text(code)
 
     # Step 1: Convert code
-    converter = ModelConverter(channels_first=False)
+    converter = ModelConverter(channels_first=channels_first)
     tf_path = Path(tmpdir) / "model_tf.py"
     converted = converter.convert_file(str(pt_path), str(tf_path))
     result["converted_lines"] = converted.count("\n")
@@ -494,9 +494,12 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
             break
     tf_model = tf_cls()
 
-    # Build TF model with dummy NHWC input
+    # Build TF model with dummy input
     c, h, w = input_shape
-    dummy = tf.zeros((1, h, w, c))
+    if channels_first:
+        dummy = tf.zeros((1, c, h, w))   # NCHW
+    else:
+        dummy = tf.zeros((1, h, w, c))   # NHWC
     tf_model(dummy, training=False)
 
     result["pt_params"] = sum(p.numel() for p in pt_model.parameters())
@@ -520,7 +523,7 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
     # Step 6: Export to PB (SavedModel + FrozenGraph) and Ascend compat check
     from pytorch2tensorflow.exporter import PBExporter
 
-    exporter = PBExporter()
+    exporter = PBExporter(channels_first=channels_first)
     export_dir = str(Path(tmpdir) / "export")
     try:
         nhwc_shape = (input_shape[1], input_shape[2], input_shape[0])
@@ -561,8 +564,11 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
         with torch.no_grad():
             pt_out = pt_model(torch.from_numpy(input_np))
 
-        input_nhwc = np.transpose(input_np, (0, 2, 3, 1))
-        tf_out = tf_model(tf.constant(input_nhwc), training=False)
+        if channels_first:
+            tf_inp = tf.constant(input_np)  # NCHW same as PyTorch
+        else:
+            tf_inp = tf.constant(np.transpose(input_np, (0, 2, 3, 1)))  # NHWC
+        tf_out = tf_model(tf_inp, training=False)
 
         # Handle tuple outputs (e.g. MultiHeadNet)
         if isinstance(pt_out, tuple):
@@ -579,7 +585,7 @@ def test_model_conversion(model_config: dict, tmpdir: str) -> dict:
         else:
             pt_np = pt_out.numpy()
             tf_np = tf_out.numpy()
-            if tf_np.ndim == 4:
+            if not channels_first and tf_np.ndim == 4:
                 tf_np = np.transpose(tf_np, (0, 3, 1, 2))
             result["pt_output_shape"] = pt_np.shape
             result["tf_output_shape"] = tf_np.shape
@@ -651,91 +657,115 @@ def print_metrics(metrics: dict, per_sample: list[dict]):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Validate model conversions")
+    parser.add_argument(
+        "--channels-first", action="store_true",
+        help="Also test with channels_first (NCHW) mode",
+    )
+    args = parser.parse_args()
+
     print("=" * 78)
     print("  Model Conversion Validation Suite (with weight transfer + accuracy metrics)")
     print("=" * 78)
 
+    modes = [False]
+    if args.channels_first:
+        modes.append(True)
+
     all_passed = True
     pass_count = 0
+    total_count = 0
     summary_rows = []
 
-    for config in MODELS:
-        print(f"\n{'─' * 78}")
-        print(f"  {config['name']}")
-        print(f"{'─' * 78}")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            try:
-                result = test_model_conversion(config, tmpdir)
-            except Exception as e:
-                result = {
-                    "name": config["name"],
-                    "passed": False,
-                    "error": str(e),
-                }
+    for channels_first in modes:
+        if len(modes) > 1:
+            mode_label = "NCHW (channels_first)" if channels_first else "NHWC (channels_last)"
+            print(f"\n{'━' * 78}")
+            print(f"  Mode: {mode_label}")
+            print(f"{'━' * 78}")
 
-            m = result.get("metrics")
-            if m:
-                print(f"  Code conversion:   OK ({result.get('converted_lines', '?')} lines)")
-                print(f"  PT params:         {result.get('pt_params', '?'):,}")
-                print(f"  TF params:         {result.get('tf_params', '?'):,}")
-                wa = result.get("weights_assigned", "?")
-                wt = result.get("weights_total", "?")
-                ws = result.get("weights_skipped", 0)
-                print(f"  Weights transfer:  {wa}/{wt} assigned, {ws} skipped")
-                print(f"  Output shape (PT): {result.get('pt_output_shape')}")
-                print(f"  Output shape (TF): {result.get('tf_output_shape')}")
+        for config in MODELS:
+            total_count += 1
+            suffix = " [NCHW]" if channels_first else ""
+            print(f"\n{'─' * 78}")
+            print(f"  {config['name']}{suffix}")
+            print(f"{'─' * 78}")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                try:
+                    result = test_model_conversion(config, tmpdir, channels_first=channels_first)
+                except Exception as e:
+                    result = {
+                        "name": config["name"],
+                        "passed": False,
+                        "error": str(e),
+                    }
 
-                # PB export results
-                pb_status = result.get("pb_export", "SKIP")
-                print(f"  PB export:         {pb_status}")
-                if pb_status == "OK":
-                    print(f"  PB graph nodes:    {result.get('pb_nodes', '?')}")
-                    unsup = result.get("pb_unsupported_ops", [])
-                    if unsup:
-                        print(f"  Unsupported ops:   {unsup}")
-                    ascend = result.get("ascend_compatible", False)
-                    print(f"  Ascend compat:     {'PASS' if ascend else 'FAIL'}")
-                    print(f"  PB load verify:    {'OK' if result.get('pb_verified') else 'FAIL'}")
+                m = result.get("metrics")
+                if m:
+                    print(f"  Code conversion:   OK ({result.get('converted_lines', '?')} lines)")
+                    print(f"  PT params:         {result.get('pt_params', '?'):,}")
+                    print(f"  TF params:         {result.get('tf_params', '?'):,}")
+                    wa = result.get("weights_assigned", "?")
+                    wt = result.get("weights_total", "?")
+                    ws = result.get("weights_skipped", 0)
+                    print(f"  Weights transfer:  {wa}/{wt} assigned, {ws} skipped")
+                    print(f"  Output shape (PT): {result.get('pt_output_shape')}")
+                    print(f"  Output shape (TF): {result.get('tf_output_shape')}")
 
-                print()
-                print_metrics(m, result["per_sample"])
+                    # PB export results
+                    pb_status = result.get("pb_export", "SKIP")
+                    print(f"  PB export:         {pb_status}")
+                    if pb_status == "OK":
+                        print(f"  PB graph nodes:    {result.get('pb_nodes', '?')}")
+                        unsup = result.get("pb_unsupported_ops", [])
+                        if unsup:
+                            print(f"  Unsupported ops:   {unsup}")
+                        ascend = result.get("ascend_compatible", False)
+                        print(f"  Ascend compat:     {'PASS' if ascend else 'FAIL'}")
+                        print(f"  PB load verify:    {'OK' if result.get('pb_verified') else 'FAIL'}")
 
-                # Print criteria check results
-                print()
-                checks = result.get("checks", {})
-                for criterion, ok in checks.items():
-                    mark = "PASS" if ok else "FAIL"
-                    print(f"  [{mark}] {criterion}")
+                    print()
+                    print_metrics(m, result["per_sample"])
 
-                if result["passed"]:
-                    pass_count += 1
-                    print(f"\n  Result: PASS")
+                    # Print criteria check results
+                    print()
+                    checks = result.get("checks", {})
+                    for criterion, ok in checks.items():
+                        mark = "PASS" if ok else "FAIL"
+                        print(f"  [{mark}] {criterion}")
+
+                    if result["passed"]:
+                        pass_count += 1
+                        print(f"\n  Result: PASS")
+                    else:
+                        all_passed = False
+                        print(f"\n  Result: FAIL — {result.get('error', '')}")
+                    row_name = config["name"] + (" [NCHW]" if channels_first else "")
+                    summary_rows.append((row_name, m["cosine_sim"],
+                                         m["max_abs_diff"], m["mean_abs_diff"],
+                                         result["passed"]))
                 else:
+                    print(f"  Result: FAIL")
+                    print(f"  Error:  {result.get('error')}")
                     all_passed = False
-                    print(f"\n  Result: FAIL — {result.get('error', '')}")
-                summary_rows.append((config["name"], m["cosine_sim"],
-                                     m["max_abs_diff"], m["mean_abs_diff"],
-                                     result["passed"]))
-            else:
-                print(f"  Result: FAIL")
-                print(f"  Error:  {result.get('error')}")
-                all_passed = False
-                summary_rows.append((config["name"], 0.0, 0.0, 0.0, False))
+                    row_name = config["name"] + (" [NCHW]" if channels_first else "")
+                    summary_rows.append((row_name, 0.0, 0.0, 0.0, False))
 
     # ── Summary table ──
     print(f"\n{'=' * 78}")
     print("  Summary")
     print(f"{'=' * 78}")
-    print(f"  {'Model':<35} {'Cosine':>10} {'MaxAbsDiff':>12} {'MeanAbsDiff':>12} {'Status':>8}")
-    print(f"  {'─'*35} {'─'*10} {'─'*12} {'─'*12} {'─'*8}")
+    print(f"  {'Model':<45} {'Cosine':>10} {'MaxAbsDiff':>12} {'MeanAbsDiff':>12} {'Status':>8}")
+    print(f"  {'─'*45} {'─'*10} {'─'*12} {'─'*12} {'─'*8}")
     for name, cos, mad, mead, ok in summary_rows:
         st = "PASS" if ok else "FAIL"
         if ok:
-            print(f"  {name:<35} {cos:>10.6f} {mad:>12.6e} {mead:>12.6e} {st:>8}")
+            print(f"  {name:<45} {cos:>10.6f} {mad:>12.6e} {mead:>12.6e} {st:>8}")
         else:
-            print(f"  {name:<35} {'—':>10} {'—':>12} {'—':>12} {st:>8}")
+            print(f"  {name:<45} {'—':>10} {'—':>12} {'—':>12} {st:>8}")
 
-    print(f"\n  Overall: {pass_count}/{len(MODELS)} PASSED"
+    print(f"\n  Overall: {pass_count}/{total_count} PASSED"
           + (" — ALL PASSED" if all_passed else " — SOME FAILED"))
     print(f"{'=' * 78}")
 

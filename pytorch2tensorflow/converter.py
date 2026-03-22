@@ -774,6 +774,9 @@ class ModelConverter:
             tensor = match.group(1)
             start_dim = match.group(2).strip() if match.group(2) else "0"
             if start_dim == "1":
+                if self.channels_first:
+                    # NCHW mode: data already in correct order, just reshape
+                    return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
                 # Transpose NHWC→NCHW before flatten so element order
                 # matches what the Dense/Linear kernel expects.
                 return (
@@ -1046,6 +1049,8 @@ class ModelConverter:
             tensor = match.group(1)
             start_dim = match.group(2)
             if start_dim == "1":
+                if self.channels_first:
+                    return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
                 return (
                     f"tf.reshape("
                     f"tf.transpose({tensor}, [0, 3, 1, 2]) "

@@ -77,7 +77,7 @@ def auto_convert(
     num_classes: Optional[int] = None,
     validate: bool = True,
     export_pb: bool = True,
-    soc_version: str = "Ascend310",
+    soc_version: str = "Ascend910B4",
     verbose: bool = True,
 ) -> AutoConvertResult:
     """One-click full auto-conversion pipeline.

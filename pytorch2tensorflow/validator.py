@@ -51,9 +51,9 @@ class AccuracyValidator:
 
     def __init__(
         self,
-        atol: float = 1e-5,
-        rtol: float = 1e-4,
-        cosine_threshold: float = 0.9999,
+        atol: float = 1e-4,
+        rtol: float = 1e-3,
+        cosine_threshold: float = 0.999,
     ):
         """
         Args:

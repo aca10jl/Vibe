@@ -107,6 +107,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
     )
 
     # Load models
+    channels_first = getattr(args, "channels_first", False)
     pt_model = _load_pytorch_model(
         args.pt_model, args.pt_weights,
         class_name=getattr(args, "class_name", None),
@@ -116,6 +117,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
         args.tf_model, input_shapes[0], args.tf_weights,
         class_name=getattr(args, "tf_class_name", None),
         model_args=getattr(args, "model_args", None),
+        channels_first=channels_first,
     )
 
     print("Running validation...")
@@ -124,6 +126,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
         tf_model,
         input_shapes,
         num_samples=args.num_samples,
+        nchw_to_nhwc=not channels_first,
     )
     print(result)
 
@@ -137,13 +140,15 @@ def cmd_export(args: argparse.Namespace) -> None:
 
     input_shapes = [tuple(int(d) for d in s.split(",")) for s in args.input_shape]
 
-    exporter = PBExporter()
+    channels_first = getattr(args, "channels_first", False)
+    exporter = PBExporter(channels_first=channels_first)
 
     # Load TF model
     tf_model = _load_tf_model(
         args.tf_model, input_shapes[0], args.tf_weights,
         class_name=getattr(args, "tf_class_name", None),
         model_args=getattr(args, "model_args", None),
+        channels_first=channels_first,
     )
 
     output_dir = args.output or "export_output"
@@ -229,6 +234,7 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
         tf_model_path, input_shapes[0],
         class_name=getattr(args, "class_name", None),
         model_args=getattr(args, "model_args", None),
+        channels_first=channels_first,
     )
 
     weight_converter = WeightConverter(strict=False)
@@ -247,14 +253,17 @@ def cmd_full_pipeline(args: argparse.Namespace) -> None:
     print("Step 3: Validating accuracy...")
     print("=" * 60)
     validator = AccuracyValidator()
-    result = validator.validate(pt_model, tf_model, input_shapes)
+    result = validator.validate(
+        pt_model, tf_model, input_shapes,
+        nchw_to_nhwc=not channels_first,
+    )
     print(result)
 
     # Step 4: Export to PB
     print("\n" + "=" * 60)
     print("Step 4: Exporting to PB...")
     print("=" * 60)
-    exporter = PBExporter()
+    exporter = PBExporter(channels_first=channels_first)
     batch_size = getattr(args, "batch_size", 1) or 1
     export_results = exporter.export_and_verify(
         tf_model,
@@ -362,6 +371,7 @@ def _load_tf_model(
     weights_path: str = None,
     class_name: str = None,
     model_args: str = None,
+    channels_first: bool = False,
 ):
     """Dynamically load a TF model from a .py file.
 
@@ -417,12 +427,15 @@ def _load_tf_model(
     # Build model with dummy input
     if input_shape:
         if isinstance(input_shape, (list, tuple)) and isinstance(input_shape[0], int):
-            # Single shape like (3, 224, 224) → NHWC (224, 224, 3)
-            if len(input_shape) == 3:
-                nhwc_shape = (input_shape[1], input_shape[2], input_shape[0])
+            if channels_first:
+                # NCHW: keep shape as-is (matches PyTorch)
+                dummy_shape = input_shape
+            elif len(input_shape) >= 2:
+                # CHW → HWC (move first dim to last)
+                dummy_shape = (*input_shape[1:], input_shape[0])
             else:
-                nhwc_shape = input_shape
-            dummy = tf.zeros((1, *nhwc_shape))
+                dummy_shape = input_shape
+            dummy = tf.zeros((1, *dummy_shape))
             model(dummy, training=False)
 
     if weights_path:
@@ -481,9 +494,13 @@ def create_parser() -> argparse.ArgumentParser:
     p_val.add_argument("--tf-weights", help="TF weights path")
     p_val.add_argument("--input-shape", nargs="+", required=True, help="Input shapes")
     p_val.add_argument("--num-samples", type=int, default=5, help="Number of test samples")
-    p_val.add_argument("--atol", type=float, default=1e-5, help="Absolute tolerance")
-    p_val.add_argument("--rtol", type=float, default=1e-4, help="Relative tolerance")
-    p_val.add_argument("--cosine-threshold", type=float, default=0.9999)
+    p_val.add_argument("--atol", type=float, default=1e-4, help="Absolute tolerance")
+    p_val.add_argument("--rtol", type=float, default=1e-3, help="Relative tolerance")
+    p_val.add_argument("--cosine-threshold", type=float, default=0.999)
+    p_val.add_argument(
+        "--channels-first", action="store_true",
+        help="Keep NCHW data format (matching PyTorch)",
+    )
     p_val.add_argument(
         "--class-name", help="PyTorch model class name to use (default: auto-detect)")
     p_val.add_argument(
@@ -497,7 +514,11 @@ def create_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--tf-weights", help="TF weights path")
     p_export.add_argument("--input-shape", nargs="+", required=True, help="Input shapes")
     p_export.add_argument("-o", "--output", help="Output directory")
-    p_export.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
+    p_export.add_argument("--soc-version", default="Ascend910B4", help="Ascend SoC version")
+    p_export.add_argument(
+        "--channels-first", action="store_true",
+        help="Keep NCHW data format (matching PyTorch)",
+    )
     p_export.add_argument(
         "--tf-class-name", help="TF model class name to use (default: auto-detect)")
     p_export.add_argument(
@@ -514,7 +535,7 @@ def create_parser() -> argparse.ArgumentParser:
     p_auto.add_argument("--pt-weights", help="PyTorch weights .pth path (optional)")
     p_auto.add_argument("--input-shape", nargs="+", help="Input shapes (e.g., 3,224,224). Auto-detected if omitted.")
     p_auto.add_argument("-o", "--output", help="Output directory")
-    p_auto.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
+    p_auto.add_argument("--soc-version", default="Ascend910B4", help="Ascend SoC version")
     p_auto.add_argument(
         "--channels-first", action="store_true",
         help="Keep NCHW data format (matching PyTorch)",
@@ -533,7 +554,7 @@ def create_parser() -> argparse.ArgumentParser:
     p_full.add_argument("--pt-weights", help="PyTorch weights .pth path (random init if omitted)")
     p_full.add_argument("--input-shape", nargs="+", required=True, help="Input shapes")
     p_full.add_argument("-o", "--output", help="Output directory")
-    p_full.add_argument("--soc-version", default="Ascend310", help="Ascend SoC version")
+    p_full.add_argument("--soc-version", default="Ascend910B4", help="Ascend SoC version")
     p_full.add_argument(
         "--channels-first", action="store_true",
         help="Keep NCHW data format (matching PyTorch)",

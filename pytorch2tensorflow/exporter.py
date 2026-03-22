@@ -359,7 +359,7 @@ class PBExporter:
         self,
         pb_path: str,
         output_path: str,
-        soc_version: str = "Ascend310",
+        soc_version: str = "Ascend910B4",
         input_shape: Optional[str] = None,
         input_format: str = "NHWC",
         framework: str = "3",  # 3 = TensorFlow
@@ -399,7 +399,7 @@ class PBExporter:
         tf_model,
         output_dir: str,
         input_shapes: list[tuple],
-        soc_version: str = "Ascend310",
+        soc_version: str = "Ascend910B4",
         batch_size: int = 1,
     ) -> dict:
         """Full pipeline: export + compatibility check + ATC command.
