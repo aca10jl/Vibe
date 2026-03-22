@@ -187,7 +187,30 @@ def main():
         str(pt_weights_path), tf_model,
         output_path=tf_weights_path,
     )
-    print(f"  权重映射: {stats['assigned']}/{stats['total_pytorch_weights']} 成功")
+    # 权重映射报告
+    total_mappable = stats.get("total_mappable", stats["total_pytorch_weights"])
+    match_method = stats.get("match_method", "name")
+    method_label = "名称匹配" if match_method == "name" else "结构匹配"
+    print(f"  映射策略: {method_label}")
+    if match_method == "structural":
+        name_hits = stats.get("name_based_matches", 0)
+        print(f"    名称匹配命中 {name_hits}/{total_mappable}, 不足 50%，自动切换到结构匹配")
+        print(f"    结构匹配按层顺序逐一对齐权重角色 (conv_kernel, bn_gamma …)")
+    print(f"  映射结果: {stats['assigned']}/{total_mappable} 成功"
+          f"  (跳过 {stats['skipped']}, 错误 {stats['errors']})")
+    if stats["errors"] > 0:
+        print(f"  [!] 映射错误详情:")
+        for err in stats.get("error_details", []):
+            print(f"      - {err}")
+    skipped_entries = [e for e in stats.get("conversion_log", []) if e["action"] == "skip"]
+    if skipped_entries:
+        print(f"  跳过的权重 ({len(skipped_entries)} 个):")
+        for entry in skipped_entries[:5]:
+            reason = entry.get("reason", "")
+            print(f"    - {entry['pytorch_name']}: {reason}")
+        if len(skipped_entries) > 5:
+            print(f"    ... 其余 {len(skipped_entries) - 5} 个已省略")
+        print(f"  说明: 跳过的权重通常为 num_batches_tracked 等 TF 不需要的统计量，不影响推理精度")
     print(f"  权重文件: {tf_weights_path}")
     print(f"  权重转换完成")
 

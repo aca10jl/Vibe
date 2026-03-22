@@ -104,13 +104,20 @@ class WeightConverter:
 
         if matched_count < total_mappable * 0.5:
             logger.info(
-                "Name-based mapping found only %d/%d matches, "
-                "falling back to structural matching",
+                "Name-based mapping matched %d/%d weights, "
+                "switching to structural matching for better coverage",
                 matched_count, total_mappable,
             )
             stats = self._assign_weights_structural(state_dict, tf_model)
+            stats["match_method"] = "structural"
+            stats["name_based_matches"] = matched_count
         else:
             stats = self._assign_weights(state_dict, tf_model, mapping)
+            stats["match_method"] = "name"
+            stats["name_based_matches"] = matched_count
+
+        stats["total_mappable"] = total_mappable
+        stats["conversion_log"] = self._conversion_log.copy()
 
         # Save if requested
         if output_path:
@@ -157,13 +164,20 @@ class WeightConverter:
 
         if matched_count < total_mappable * 0.5:
             logger.info(
-                "Name-based mapping found only %d/%d matches, "
-                "falling back to structural matching",
+                "Name-based mapping matched %d/%d weights, "
+                "switching to structural matching for better coverage",
                 matched_count, total_mappable,
             )
             stats = self._assign_weights_structural(np_state_dict, tf_model)
+            stats["match_method"] = "structural"
+            stats["name_based_matches"] = matched_count
         else:
             stats = self._assign_weights(np_state_dict, tf_model, mapping)
+            stats["match_method"] = "name"
+            stats["name_based_matches"] = matched_count
+
+        stats["total_mappable"] = total_mappable
+        stats["conversion_log"] = self._conversion_log.copy()
 
         if output_path:
             self._save_tf_weights(tf_model, output_path)
@@ -274,6 +288,7 @@ class WeightConverter:
         tf_weight_names = set(tf_weights.keys())
 
         mapping = {}
+        unmatched = []
 
         if custom_mapping:
             mapping.update(custom_mapping)
@@ -292,7 +307,15 @@ class WeightConverter:
             if matched:
                 mapping[pt_name] = matched
             else:
-                logger.warning("No TF match for PyTorch weight: %s → %s", pt_name, tf_name)
+                unmatched.append(pt_name)
+                logger.debug("Name-based mapping: no TF match for %s → %s", pt_name, tf_name)
+
+        if unmatched:
+            logger.debug(
+                "Name-based mapping: %d/%d weights unmatched, "
+                "will attempt structural matching as fallback",
+                len(unmatched), len(unmatched) + len(mapping),
+            )
 
         return mapping
 
