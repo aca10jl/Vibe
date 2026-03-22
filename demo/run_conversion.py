@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-一键转换脚本：将 PyTorch UNet 模型转换为 TensorFlow 版本并导出 PB 模型
+一键转换脚本：将 PyTorch 模型转换为 TensorFlow 版本并导出 PB 模型
 
 用法:
     python demo/run_conversion.py
     python demo/run_conversion.py --channels-first   # 保持 NCHW 格式
 
 输入文件 (demo/pytorch_model/):
-    model.py          — PyTorch UNet 模型定义
+    model.py          — PyTorch 模型定义
     unet_weights.pth  — PyTorch 训练权重
 
 输出文件 (demo/output/):
@@ -37,7 +37,7 @@ OUTPUT_DIR = DEMO_DIR / "output"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PyTorch UNet → TensorFlow 全流程转换")
+    parser = argparse.ArgumentParser(description="PyTorch Model → TensorFlow 全流程转换")
     parser.add_argument(
         "--channels-first", action="store_true",
         help="保持 NCHW 数据格式 (匹配 PyTorch), TF 层使用 data_format='channels_first'",
@@ -68,7 +68,7 @@ def main():
     cosine_threshold = 0.99   # 余弦相似度通过阈值
 
     print("=" * 70)
-    print("  PyTorch UNet → TensorFlow 全流程转换")
+    print("  PyTorch Model → TensorFlow 全流程转换")
     print(f"  数据格式: {mode_label}")
     print(f"  模型参数: in_channels={in_channels}, num_classes={num_classes}, base_features={base_features}")
     print(f"  输入形状: {input_shape} (CHW)")
@@ -85,9 +85,9 @@ def main():
         print(f"  权重文件不存在，初始化模型参数并保存...")
         import torch
         sys.path.insert(0, str(PT_MODEL_DIR))
-        from model import UNet as _UNet
+        from model import UNet as Model
         torch.manual_seed(random_seed)
-        _init_model = _UNet(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
+        _init_model = Model(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
         _init_model.eval()
         pt_weights_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(_init_model.state_dict(), str(pt_weights_path))
@@ -132,9 +132,9 @@ def main():
     import torch
 
     sys.path.insert(0, str(PT_MODEL_DIR))
-    from model import UNet as PyTorchUNet
+    from model import UNet as PyTorchModel
 
-    pt_model = PyTorchUNet(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
+    pt_model = PyTorchModel(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
     state_dict = torch.load(str(pt_weights_path), map_location="cpu", weights_only=True)
     pt_model.load_state_dict(state_dict)
     pt_model.eval()
