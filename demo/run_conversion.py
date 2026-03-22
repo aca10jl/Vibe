@@ -43,6 +43,10 @@ def main():
         help="保持 NCHW 数据格式 (匹配 PyTorch), TF 层使用 data_format='channels_first'",
     )
     parser.add_argument(
+        "--pt-weights", default=None,
+        help="PyTorch 权重文件路径 (默认: demo/pytorch_model/unet_weights.pth, 不存在则自动初始化)",
+    )
+    parser.add_argument(
         "--soc-version", default="Ascend910B4",
         help="目标昇腾 SoC 型号 (默认: Ascend910B4)",
     )
@@ -72,19 +76,25 @@ def main():
 
     # 检查输入文件
     pt_model_path = PT_MODEL_DIR / "model.py"
-    pt_weights_path = PT_MODEL_DIR / "unet_weights.pth"
+    pt_weights_path = Path(args.pt_weights) if args.pt_weights else PT_MODEL_DIR / "unet_weights.pth"
 
     if not pt_model_path.exists():
         print(f"[ERROR] 找不到 PyTorch 模型文件: {pt_model_path}")
         return 1
     if not pt_weights_path.exists():
-        print(f"  权重文件不存在，自动生成中...")
-        import subprocess
-        subprocess.run(
-            [sys.executable, str(PT_MODEL_DIR / "generate_weights.py")],
-            check=True,
-        )
-        print(f"  权重已生成: {pt_weights_path}")
+        print(f"  权重文件不存在，初始化模型参数并保存...")
+        import torch
+        sys.path.insert(0, str(PT_MODEL_DIR))
+        from model import UNet as _UNet
+        torch.manual_seed(random_seed)
+        _init_model = _UNet(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
+        _init_model.eval()
+        pt_weights_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(_init_model.state_dict(), str(pt_weights_path))
+        _param_count = sum(p.numel() for p in _init_model.parameters())
+        print(f"  参数量: {_param_count:,}")
+        print(f"  权重已初始化并保存: {pt_weights_path}")
+        del _init_model
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
