@@ -295,6 +295,8 @@ class ModelConverter:
             source = self._convert_layernorm_params(source)
         if "GroupNorm" in pt_layer:
             source = self._convert_groupnorm_params(source)
+        if "Upsample" in pt_layer or "UpsamplingBilinear" in pt_layer or "UpsamplingNearest" in pt_layer:
+            source = self._convert_upsample_params(source, tf_layer)
 
         # Strip inplace= parameter from activation layers (TF has no inplace)
         if any(act in pt_layer for act in ("ReLU", "LeakyReLU", "ELU", "PReLU",
@@ -633,6 +635,43 @@ class ModelConverter:
             return f"{layer}({num_groups})"
 
         source = re.sub(pattern, _drop_num_channels, source)
+        return source
+
+    def _convert_upsample_params(self, source: str, tf_layer: str) -> str:
+        """Convert nn.Upsample parameters to tf.keras.layers.UpSampling2D.
+
+        PyTorch: nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        TF:      tf.keras.layers.UpSampling2D(size=(2, 2), interpolation='bilinear')
+
+        Parameter mapping:
+            scale_factor=N  → size=(N, N)
+            mode='nearest'  → interpolation='nearest'
+            mode='bilinear' → interpolation='bilinear'
+            align_corners   → removed (not supported in TF)
+        """
+        # scale_factor=N → size=(N, N)
+        # Handle both int and tuple forms
+        def _replace_scale_factor(match: re.Match) -> str:
+            factor = match.group(1).strip()
+            # If already a tuple like (2, 2), use as-is
+            if factor.startswith("("):
+                return f"size={factor}"
+            return f"size=({factor}, {factor})"
+
+        source = re.sub(
+            r"scale_factor\s*=\s*([^,)]+)",
+            _replace_scale_factor,
+            source,
+        )
+
+        # mode → interpolation
+        for pt_mode in ("nearest", "bilinear", "bicubic"):
+            source = source.replace(f"mode='{pt_mode}'", f"interpolation='{pt_mode}'")
+            source = source.replace(f'mode="{pt_mode}"', f"interpolation='{pt_mode}'")
+
+        # Remove align_corners (not supported in TF UpSampling2D)
+        source = re.sub(r",?\s*align_corners\s*=\s*(True|False)", "", source)
+
         return source
 
     def _convert_adaptive_pool_params(self, source: str, tf_layer: str) -> str:

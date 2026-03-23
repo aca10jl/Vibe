@@ -5,6 +5,9 @@
 用法:
     python demo/run_conversion.py
     python demo/run_conversion.py --channels-first   # 保持 NCHW 格式
+    python demo/run_conversion.py --model-class UNet  # 指定入口模型类
+    python demo/run_conversion.py --input-shapes "3,128,128"            # 单输入
+    python demo/run_conversion.py --input-shapes "3,128,128 1,128,128"  # 多输入
 
 输入文件 (demo/pytorch_model/):
     model.py          — PyTorch 模型定义
@@ -36,6 +39,96 @@ PT_MODEL_DIR = DEMO_DIR / "pytorch_model"
 OUTPUT_DIR = DEMO_DIR / "output"
 
 
+# ──────────────────────────────────────────
+# 辅助函数
+# ──────────────────────────────────────────
+
+def _detect_entry_class(source: str, base_keyword: str = "Module") -> str | None:
+    """从源文件 AST 中检测入口模型类 (最后一个含 base_keyword 基类的 class)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    entry = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                base_str = ast.dump(base) if isinstance(base, ast.Attribute) else getattr(base, "id", "")
+                if base_keyword in base_str:
+                    entry = node.name
+    return entry
+
+
+def _detect_forward_args(source: str, class_name: str) -> list[str]:
+    """检测指定 class 的 forward/call 方法参数列表 (不含 self/training)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name in ("forward", "call"):
+                    return [
+                        a.arg for a in item.args.args
+                        if a.arg not in ("self", "training")
+                    ]
+    return []
+
+
+def _load_class_from_file(file_path: Path, class_name: str, module_name: str = "dynamic_model"):
+    """从 Python 文件动态加载指定 class."""
+    spec = importlib.util.spec_from_file_location(module_name, str(file_path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    cls = getattr(mod, class_name, None)
+    if cls is None:
+        available = [n for n in dir(mod) if not n.startswith("_")]
+        raise ValueError(
+            f"类 '{class_name}' 在 {file_path} 中未找到。"
+            f"可用名称: {available}"
+        )
+    return mod, cls
+
+
+def _parse_input_shapes(raw: str) -> list[tuple[int, ...]]:
+    """解析 --input-shapes 字符串为 list[tuple].
+
+    格式: "C,H,W" (单输入) 或 "C1,H1,W1 C2,H2,W2" (多输入, 空格分隔)
+    """
+    shapes = []
+    for part in raw.strip().split():
+        dims = tuple(int(d) for d in part.split(","))
+        shapes.append(dims)
+    return shapes
+
+
+def _build_dummy_inputs(input_shapes, batch_size, channels_first):
+    """根据 input_shapes 构建 numpy dummy 输入列表 (NCHW 格式)."""
+    inputs = []
+    for shape in input_shapes:
+        if len(shape) == 3:
+            c, h, w = shape
+            inputs.append(np.random.randn(batch_size, c, h, w).astype(np.float32))
+        else:
+            inputs.append(np.random.randn(batch_size, *shape).astype(np.float32))
+    return inputs
+
+
+def _nchw_to_nhwc(arr):
+    """将 4D NCHW 数组转为 NHWC."""
+    if arr.ndim == 4:
+        return np.transpose(arr, (0, 2, 3, 1))
+    return arr
+
+
+def _nhwc_to_nchw(arr):
+    """将 4D NHWC 数组转为 NCHW."""
+    if arr.ndim == 4:
+        return np.transpose(arr, (0, 3, 1, 2))
+    return arr
+
+
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Model → TensorFlow 全流程转换")
     parser.add_argument(
@@ -50,44 +143,98 @@ def main():
         "--soc-version", default="Ascend910B4",
         help="目标昇腾 SoC 型号 (默认: Ascend910B4)",
     )
+    parser.add_argument(
+        "--model-class", default=None,
+        help="入口模型类名 (如 UNet)。未指定时自动检测源文件中最后一个 nn.Module 子类",
+    )
+    parser.add_argument(
+        "--model-args", default="in_channels=3, num_classes=2, base_features=32",
+        help="模型构造参数 (Python kwargs 格式, 默认: 'in_channels=3, num_classes=2, base_features=32')",
+    )
+    parser.add_argument(
+        "--input-shapes", default=None,
+        help=(
+            "模型输入形状 (CHW 格式, 不含 batch)。"
+            "单输入: '3,128,128'  多输入: '3,128,128 1,128,128' (空格分隔)。"
+            "未指定时根据 forward 签名参数数量自动推断"
+        ),
+    )
     args = parser.parse_args()
 
     channels_first = args.channels_first
     mode_label = "NCHW (channels_first)" if channels_first else "NHWC (channels_last)"
 
     # ──────────────────────────────────────────
-    # 核心参数 (模型构造 / 数据维度 / 验证配置)
+    # 解析模型构造参数
     # ──────────────────────────────────────────
-    in_channels = 3           # 输入通道数
-    num_classes = 2           # 输出类别数
-    base_features = 32        # 基础特征图通道数
-    input_shape = (in_channels, 128, 128)  # CHW 格式
-    batch_size = 1            # 推理批次大小
-    num_tests = 5             # 精度校验样本数
-    random_seed = 42          # 随机种子 (可复现)
-    cosine_threshold = 0.99   # 余弦相似度通过阈值
+    model_kwargs = {}
+    if args.model_args:
+        for item in args.model_args.split(","):
+            item = item.strip()
+            if "=" in item:
+                k, v = item.split("=", 1)
+                model_kwargs[k.strip()] = ast.literal_eval(v.strip())
+
+    # ──────────────────────────────────────────
+    # 检测入口模型类
+    # ──────────────────────────────────────────
+    pt_model_path = PT_MODEL_DIR / "model.py"
+    if not pt_model_path.exists():
+        print(f"[ERROR] 找不到 PyTorch 模型文件: {pt_model_path}")
+        return 1
+
+    pt_source = pt_model_path.read_text(encoding="utf-8")
+
+    if args.model_class:
+        entry_class = args.model_class
+        print(f"  入口模型类: {entry_class} (用户指定)")
+    else:
+        entry_class = _detect_entry_class(pt_source, "Module")
+        if entry_class is None:
+            print("[ERROR] 未能自动检测到 nn.Module 子类，请通过 --model-class 指定")
+            return 1
+        print(f"  入口模型类: {entry_class} (自动检测)")
+
+    # ──────────────────────────────────────────
+    # 解析输入形状
+    # ──────────────────────────────────────────
+    if args.input_shapes:
+        input_shapes = _parse_input_shapes(args.input_shapes)
+    else:
+        # 根据 forward 签名推断输入数量，每个输入默认使用第一个参数的形状
+        forward_args = _detect_forward_args(pt_source, entry_class)
+        num_inputs = max(len(forward_args), 1)
+        in_channels = model_kwargs.get("in_channels", 3)
+        default_shape = (in_channels, 128, 128)
+        input_shapes = [default_shape] * num_inputs
+
+    batch_size = 1
+    num_tests = 5
+    random_seed = 42
+    cosine_threshold = 0.99
 
     print("=" * 70)
     print("  PyTorch Model → TensorFlow 全流程转换")
     print(f"  数据格式: {mode_label}")
-    print(f"  模型参数: in_channels={in_channels}, num_classes={num_classes}, base_features={base_features}")
-    print(f"  输入形状: {input_shape} (CHW)")
+    print(f"  模型参数: {', '.join(f'{k}={v}' for k, v in model_kwargs.items())}")
+    if len(input_shapes) == 1:
+        print(f"  输入形状: {input_shapes[0]} (CHW)")
+    else:
+        for idx, s in enumerate(input_shapes):
+            print(f"  输入 {idx}: {s} (CHW)")
     print("=" * 70)
 
-    # 检查输入文件
-    pt_model_path = PT_MODEL_DIR / "model.py"
+    # ──────────────────────────────────────────
+    # 权重文件检查 & 自动初始化
+    # ──────────────────────────────────────────
     pt_weights_path = Path(args.pt_weights) if args.pt_weights else PT_MODEL_DIR / "unet_weights.pth"
-
-    if not pt_model_path.exists():
-        print(f"[ERROR] 找不到 PyTorch 模型文件: {pt_model_path}")
-        return 1
     if not pt_weights_path.exists():
         print(f"  权重文件不存在，初始化模型参数并保存...")
         import torch
         sys.path.insert(0, str(PT_MODEL_DIR))
-        from model import UNet as Model
+        _, ModelCls = _load_class_from_file(pt_model_path, entry_class, "pt_init_model")
         torch.manual_seed(random_seed)
-        _init_model = Model(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
+        _init_model = ModelCls(**model_kwargs)
         _init_model.eval()
         pt_weights_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(_init_model.state_dict(), str(pt_weights_path))
@@ -119,7 +266,7 @@ def main():
     for line in converted_code.split("\n"):
         s = line.strip()
         if any(k in s for k in [
-            "class UNet", "class DoubleConv", "class Down", "class Up",
+            f"class {entry_class}", "class DoubleConv", "class Down", "class Up",
             "tf.pad(", "tf.concat(", "def call", "data_format",
         ]):
             print(f"  | {line.rstrip()}")
@@ -132,9 +279,9 @@ def main():
     import torch
 
     sys.path.insert(0, str(PT_MODEL_DIR))
-    from model import UNet as PyTorchModel
+    _, PyTorchModelCls = _load_class_from_file(pt_model_path, entry_class, "pt_model")
 
-    pt_model = PyTorchModel(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
+    pt_model = PyTorchModelCls(**model_kwargs)
     state_dict = torch.load(str(pt_weights_path), map_location="cpu", weights_only=True)
     pt_model.load_state_dict(state_dict)
     pt_model.eval()
@@ -150,30 +297,40 @@ def main():
     print("[Step 3/5] 构建 TensorFlow 模型 & 转换权重 ...")
     import tensorflow as tf
 
-    # 使用自动转换的代码加载 TF 模型
-    spec = importlib.util.spec_from_file_location("tf_model", str(tf_model_path))
-    tf_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(tf_mod)
+    # 加载转换后的 TF 模型
+    tf_mod, tf_cls = _load_class_from_file(tf_model_path, entry_class, "tf_model")
+    if not (isinstance(tf_cls, type) and issubclass(tf_cls, tf.keras.Model)):
+        # 如果指定类名在 TF 侧不是 keras Model，回退自动检测
+        tf_cls = None
+        tree = ast.parse(converted_code)
+        tf_cls_names = [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
+        for cname in reversed(tf_cls_names):
+            obj = getattr(tf_mod, cname, None)
+            if obj and isinstance(obj, type) and issubclass(obj, tf.keras.Model):
+                tf_cls = obj
+                break
+        if tf_cls is None:
+            print("[ERROR] 未在转换后代码中找到 tf.keras.Model 子类")
+            return 1
 
-    # 找到主模型类 (最后一个 tf.keras.Model 子类)
-    tree = ast.parse(converted_code)
-    tf_cls_names = [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
-    tf_cls = None
-    for cname in reversed(tf_cls_names):
-        obj = getattr(tf_mod, cname, None)
-        if obj and isinstance(obj, type) and issubclass(obj, tf.keras.Model):
-            tf_cls = obj
-            break
+    tf_model = tf_cls(**model_kwargs)
 
-    tf_model = tf_cls(in_channels=in_channels, num_classes=num_classes, base_features=base_features)
+    # 构建模型 (多输入兼容)
+    dummy_inputs_tf = []
+    for shape in input_shapes:
+        if len(shape) == 3:
+            c, h, w = shape
+            if channels_first:
+                dummy_inputs_tf.append(tf.zeros((batch_size, c, h, w)))
+            else:
+                dummy_inputs_tf.append(tf.zeros((batch_size, h, w, c)))
+        else:
+            dummy_inputs_tf.append(tf.zeros((batch_size, *shape)))
 
-    # 构建模型
-    c, h, w = input_shape
-    if channels_first:
-        dummy = tf.zeros((batch_size, c, h, w))   # NCHW
+    if len(dummy_inputs_tf) == 1:
+        tf_model(dummy_inputs_tf[0], training=False)
     else:
-        dummy = tf.zeros((batch_size, h, w, c))   # NHWC
-    tf_model(dummy, training=False)
+        tf_model(*dummy_inputs_tf, training=False)
 
     tf_param_count = sum(np.prod(v.shape) for v in tf_model.weights)
     print(f"  TF 参数量: {int(tf_param_count):,}")
@@ -190,8 +347,8 @@ def main():
     # 权重映射报告
     total_mappable = stats.get("total_mappable", stats["total_pytorch_weights"])
     match_method = stats.get("match_method", "name")
-    method_label = "名称匹配" if match_method == "name" else "结构匹配"
-    print(f"  映射策略: {method_label}")
+    method_label_w = "名称匹配" if match_method == "name" else "结构匹配"
+    print(f"  映射策略: {method_label_w}")
     if match_method == "structural":
         name_hits = stats.get("name_based_matches", 0)
         print(f"    名称匹配命中 {name_hits}/{total_mappable}, 不足 50%，自动切换到结构匹配")
@@ -227,25 +384,32 @@ def main():
 
     for i in range(num_tests):
         # 生成随机输入 (NCHW)
-        input_np = np.random.randn(batch_size, c, h, w).astype(np.float32)
+        inputs_nchw = _build_dummy_inputs(input_shapes, batch_size, channels_first)
 
         # PyTorch 前向推理 (NCHW)
         with torch.no_grad():
-            pt_out = pt_model(torch.from_numpy(input_np)).numpy()
+            pt_tensors = [torch.from_numpy(x) for x in inputs_nchw]
+            if len(pt_tensors) == 1:
+                pt_out = pt_model(pt_tensors[0]).numpy()
+            else:
+                pt_out = pt_model(*pt_tensors).numpy()
 
         # TF 前向推理
         if channels_first:
-            tf_out = tf_model(tf.constant(input_np), training=False).numpy()
-            tf_out_nchw = tf_out
+            tf_inputs = [tf.constant(x) for x in inputs_nchw]
         else:
-            input_nhwc = np.transpose(input_np, (0, 2, 3, 1))
-            tf_out = tf_model(tf.constant(input_nhwc), training=False).numpy()
-            tf_out_nchw = np.transpose(tf_out, (0, 3, 1, 2))
+            tf_inputs = [tf.constant(_nchw_to_nhwc(x)) for x in inputs_nchw]
+
+        if len(tf_inputs) == 1:
+            tf_out = tf_model(tf_inputs[0], training=False).numpy()
+        else:
+            tf_out = tf_model(*tf_inputs, training=False).numpy()
+
+        tf_out_nchw = tf_out if channels_first else _nhwc_to_nchw(tf_out)
 
         # 计算指标
         abs_diff = np.abs(pt_out - tf_out_nchw)
         max_abs = float(np.max(abs_diff))
-        mean_abs = float(np.mean(abs_diff))
 
         pt_flat = pt_out.flatten()
         tf_flat = tf_out_nchw.flatten()
@@ -278,7 +442,7 @@ def main():
     export_results = exporter.export_and_verify(
         tf_model,
         str(OUTPUT_DIR),
-        [input_shape],
+        input_shapes,
         soc_version=args.soc_version,
         batch_size=batch_size,
     )
