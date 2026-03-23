@@ -1377,6 +1377,40 @@ class ModelConverter:
             source,
         )
 
+        # No-arg tensor methods that become tf.xxx(tensor)
+        # Handles both `x.abs()` and `(expr).abs()` patterns
+        noarg_method_map = {
+            "abs": "tf.abs",
+            "exp": "tf.exp",
+            "log": "tf.math.log",
+            "sqrt": "tf.math.sqrt",
+            "neg": "tf.negative",
+            "sign": "tf.sign",
+            "ceil": "tf.math.ceil",
+            "floor": "tf.math.floor",
+            "round": "tf.math.round",
+            "sigmoid": "tf.math.sigmoid",
+            "tanh": "tf.math.tanh",
+            "relu": "tf.nn.relu",
+        }
+        for pt_method, tf_func in noarg_method_map.items():
+            # Match expr.method() where expr is either a word or (parenthesized expr)
+            # Pattern 1: (expr).method()
+            def _replace_paren_noarg(m, _tf=tf_func):
+                return f"{_tf}({m.group(1)})"
+
+            source = re.sub(
+                r"\(([^)]+)\)\." + re.escape(pt_method) + r"\(\)",
+                _replace_paren_noarg,
+                source,
+            )
+            # Pattern 2: var.method()  (simple variable name)
+            source = re.sub(
+                r"(\w+)\." + re.escape(pt_method) + r"\(\)",
+                lambda m, _tf=tf_func: f"{_tf}({m.group(1)})",
+                source,
+            )
+
         return source
 
     # ────────────────────────────────────────
