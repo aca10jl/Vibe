@@ -330,63 +330,212 @@ class ModelConverter:
 
         return source
 
+    @staticmethod
+    def _split_args_paren_aware(args_str: str) -> list[str]:
+        """Split argument string by commas, respecting nested parens/brackets."""
+        parts = []
+        depth = 0
+        current = []
+        for ch in args_str:
+            if ch in ("(", "["):
+                depth += 1
+                current.append(ch)
+            elif ch in (")", "]"):
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                parts.append("".join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        tail = "".join(current).strip()
+        if tail:
+            parts.append(tail)
+        return parts
+
+    @staticmethod
+    def _is_keyword_arg(part: str) -> bool:
+        """Check if an argument part is a keyword argument (e.g. 'key=value')."""
+        return bool(re.search(r"(?<![=!<>])=(?!=)", part))
+
     def _convert_conv_params(self, source: str, tf_layer: str) -> str:
         """Convert Conv layer parameters from PyTorch to TF convention.
 
         PyTorch Conv: nn.Conv2d(in_channels, out_channels, kernel_size, ...)
         TF Conv:      tf.keras.layers.Conv2D(filters, kernel_size, ...)
 
-        The first positional arg (in_channels) must be removed since TF
-        infers input channels automatically.
+        Handles:
+            - Dropping first positional arg (in_channels)
+            - Removing keyword in_channels= / out_channels= → filters=
+            - padding int/tuple → 'same'/'valid'
+            - stride → strides, dilation → dilation_rate, bias → use_bias
+            - Removing output_padding (not supported in TF)
         """
-        # Remove in_channels (first positional arg) from Conv layer calls.
-        # PyTorch: Conv2d(in_channels, out_channels, ...) — 2 positional args
-        # TF:      Conv2D(filters, ...) — only needs out_channels
-        # Strategy: match the full call from layer name to closing paren,
-        # then drop only the first positional arg via a callback.
-        conv_call_full = (
-            r"(" + re.escape(tf_layer) + r")"  # specific layer name
-            r"\(([^)]*)\)"                      # entire argument list
-        )
+        # Use paren-depth aware extraction to handle nested tuples
+        conv_call_full = re.escape(tf_layer) + r"\("
 
-        def _drop_first_pos_arg(match: re.Match) -> str:
-            layer = match.group(1)
-            args_str = match.group(2).strip()
-            if not args_str:
-                return f"{layer}()"
-            # Split on commas, being careful with nested parens
-            parts = [p.strip() for p in args_str.split(",")]
-            # Count leading positional args (no keyword '=' sign).
-            # Must distinguish keyword '=' from comparison operators (==, !=, <=, >=).
+        def _process_conv_call(match: re.Match) -> str:
+            start = match.start()
+            # Find the matching closing paren
+            depth = 1
+            i = match.end()
+            while i < len(source) and depth > 0:
+                if source[i] == "(":
+                    depth += 1
+                elif source[i] == ")":
+                    depth -= 1
+                i += 1
+            args_str = source[match.end():i - 1]
+            parts = self._split_args_paren_aware(args_str)
+
+            # --- Drop in_channels ---
+            # Count leading positional args
             num_positional = 0
             for p in parts:
-                if re.search(r"(?<![=!<>])=(?!=)", p):
+                if self._is_keyword_arg(p):
                     break
                 num_positional += 1
-            # Only drop first arg if there are >=2 positional args
+            # Drop first positional if there are >= 2 positional args
             if num_positional >= 2:
                 parts = parts[1:]
-            return f"{layer}({', '.join(parts)})"
 
-        source = re.sub(conv_call_full, _drop_first_pos_arg, source)
+            # Remove keyword in_channels= and rename out_channels= to filters
+            cleaned = []
+            for p in parts:
+                stripped = p.strip()
+                if re.match(r"in_channels\s*=", stripped):
+                    continue
+                if re.match(r"out_channels\s*=", stripped):
+                    p = re.sub(r"out_channels\s*=", "", p).strip()
+                    # becomes first positional arg (filters)
+                cleaned.append(p)
+            parts = cleaned
 
-        # Rename Conv keyword args, but ONLY inside tf.keras.layers.XXX(...) calls.
-        # Using a callback to avoid renaming identically-named function parameters
-        # (e.g. `def __init__(self, ..., stride=1)` must NOT become `strides=1`).
-        conv_call_re = r"(" + re.escape(tf_layer) + r"\([^)]*)"
-        keyword_renames = [
-            (r"\bpadding\s*=\s*(\d+)", self._padding_value_to_tf),
-            (r"\bstride\s*=", "strides="),
-            (r"\bdilation\s*=", "dilation_rate="),
-            (r"\bbias\s*=", "use_bias="),
-        ]
-        for kw_pattern, replacement in keyword_renames:
-            def _rename_in_call(match: re.Match, _kw=kw_pattern, _rep=replacement) -> str:
-                call_str = match.group(0)
-                if callable(_rep):
-                    return re.sub(_kw, _rep, call_str)
-                return re.sub(_kw, _rep, call_str)
-            source = re.sub(conv_call_re, _rename_in_call, source)
+            # --- Keyword renames ---
+            renamed = []
+            for p in parts:
+                s = p.strip()
+                # padding: int or tuple → 'same'/'valid'
+                m = re.match(r"padding\s*=\s*(.+)$", s)
+                if m:
+                    val = m.group(1).strip()
+                    if val == "0":
+                        renamed.append("padding='valid'")
+                    elif re.match(r"^\d+$", val):
+                        renamed.append("padding='same'")
+                    elif re.match(r"^\(\s*0\s*(,\s*0\s*)*\)$", val):
+                        renamed.append("padding='valid'")
+                    elif re.match(r"^\([\d\s,]+\)$", val):
+                        renamed.append("padding='same'")
+                    elif val in ("'same'", '"same"', "'valid'", '"valid"'):
+                        renamed.append(p)
+                    else:
+                        renamed.append("padding='same'")
+                    continue
+                # stride → strides
+                s2 = re.sub(r"^stride\s*=", "strides=", s)
+                if s2 != s:
+                    renamed.append(s2)
+                    continue
+                # dilation → dilation_rate
+                s2 = re.sub(r"^dilation\s*=", "dilation_rate=", s)
+                if s2 != s:
+                    renamed.append(s2)
+                    continue
+                # bias → use_bias
+                s2 = re.sub(r"^bias\s*=", "use_bias=", s)
+                if s2 != s:
+                    renamed.append(s2)
+                    continue
+                # output_padding — not supported in TF, remove
+                if re.match(r"output_padding\s*=", s):
+                    continue
+                renamed.append(p)
+            parts = renamed
+
+            return f"{tf_layer}({', '.join(parts)})"
+
+        # Apply to each Conv call (non-overlapping, left to right)
+        result = []
+        last_end = 0
+        for match in re.finditer(conv_call_full, source):
+            start = match.start()
+            # Find matching closing paren
+            depth = 1
+            i = match.end()
+            while i < len(source) and depth > 0:
+                if source[i] == "(":
+                    depth += 1
+                elif source[i] == ")":
+                    depth -= 1
+                i += 1
+            args_str = source[match.end():i - 1]
+            parts = self._split_args_paren_aware(args_str)
+
+            # --- Drop in_channels ---
+            num_positional = 0
+            for p in parts:
+                if self._is_keyword_arg(p):
+                    break
+                num_positional += 1
+            if num_positional >= 2:
+                parts = parts[1:]
+
+            # Remove keyword in_channels= and rename out_channels=
+            cleaned = []
+            for p in parts:
+                stripped = p.strip()
+                if re.match(r"in_channels\s*=", stripped):
+                    continue
+                if re.match(r"out_channels\s*=", stripped):
+                    p = re.sub(r"out_channels\s*=", "", p).strip()
+                cleaned.append(p)
+            parts = cleaned
+
+            # --- Keyword renames ---
+            renamed = []
+            for p in parts:
+                s = p.strip()
+                # padding: int or tuple → 'same'/'valid'
+                m = re.match(r"padding\s*=\s*(.+)$", s)
+                if m:
+                    val = m.group(1).strip()
+                    if val == "0":
+                        renamed.append("padding='valid'")
+                    elif re.match(r"^\d+$", val):
+                        renamed.append("padding='same'")
+                    elif re.match(r"^\(\s*0\s*(,\s*0\s*)*\)$", val):
+                        renamed.append("padding='valid'")
+                    elif re.match(r"^\([\d\s,]+\)$", val):
+                        renamed.append("padding='same'")
+                    elif val in ("'same'", '"same"', "'valid'", '"valid"'):
+                        renamed.append(p)
+                    else:
+                        renamed.append("padding='same'")
+                    continue
+                s2 = re.sub(r"^stride\s*=", "strides=", s)
+                if s2 != s:
+                    renamed.append(s2)
+                    continue
+                s2 = re.sub(r"^dilation\s*=", "dilation_rate=", s)
+                if s2 != s:
+                    renamed.append(s2)
+                    continue
+                s2 = re.sub(r"^bias\s*=", "use_bias=", s)
+                if s2 != s:
+                    renamed.append(s2)
+                    continue
+                if re.match(r"output_padding\s*=", s):
+                    continue
+                renamed.append(p)
+            parts = renamed
+
+            result.append(source[last_end:start])
+            result.append(f"{tf_layer}({', '.join(parts)})")
+            last_end = i
+
+        result.append(source[last_end:])
+        source = "".join(result)
 
         # Fix stride>1 + padding asymmetry (must run after keyword renames)
         if not self.channels_first:
@@ -410,13 +559,6 @@ class ModelConverter:
         # else: channels_last (NHWC) is the TF default, no explicit param needed
 
         return source
-
-    def _padding_value_to_tf(self, match: re.Match) -> str:
-        val = int(match.group(1))
-        if val == 0:
-            return "padding='valid'"
-        else:
-            return f"padding='same'"
 
     def _fix_stride_padding(self, source: str, tf_layer: str) -> str:
         """Fix Conv layers with stride>1 and padding>0.
@@ -508,6 +650,12 @@ class ModelConverter:
             r"\1(",
             source,
         )
+        # Handle keyword form: num_features=N
+        source = re.sub(
+            r"(tf\.keras\.layers\.BatchNormalization\()\s*num_features\s*=\s*[^,)]+,?\s*",
+            r"\1",
+            source,
+        )
         # eps → epsilon
         source = re.sub(r"\beps\s*=", "epsilon=", source)
         # momentum handling: PyTorch default=0.1, TF default=0.99
@@ -549,7 +697,10 @@ class ModelConverter:
         PyTorch: nn.Linear(in_features, out_features, bias=True)
         TF:      tf.keras.layers.Dense(units, use_bias=True)
 
-        The in_features (first positional arg) must be removed since TF infers it.
+        Handles:
+            - Dropping first positional arg (in_features)
+            - Removing keyword in_features= and renaming out_features=
+            - bias → use_bias
         """
         # Remove in_features (first positional arg) from Dense calls.
         # Match: Dense(expr1, expr2, ...) where expr1 and expr2 are positional
@@ -568,6 +719,19 @@ class ModelConverter:
             return f"{layer}({out_features}"
 
         source = re.sub(linear_pattern, _drop_in_features, source)
+
+        # Handle keyword form: Dense(in_features=X, out_features=Y, ...)
+        # Remove in_features=, rename out_features= to positional
+        def _fix_dense_kwargs(match: re.Match) -> str:
+            call = match.group(0)
+            # Remove in_features=...
+            call = re.sub(r"in_features\s*=\s*[^,)]+,?\s*", "", call)
+            # Rename out_features= to positional (just remove the keyword)
+            call = re.sub(r"out_features\s*=\s*", "", call)
+            # Clean up leading comma after Dense(
+            call = re.sub(r"(Dense\()\s*,\s*", r"\1", call)
+            return call
+        source = re.sub(r"tf\.keras\.layers\.Dense\([^)]*\)", _fix_dense_kwargs, source)
 
         # bias → use_bias (scoped to Dense layer calls only)
         def _rename_bias(match: re.Match) -> str:
