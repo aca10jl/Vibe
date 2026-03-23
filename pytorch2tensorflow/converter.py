@@ -95,8 +95,12 @@ class ModelConverter:
         self._custom_layers_needed.clear()
         self._explicit_padding_convs.clear()
 
+        # Step 0: Normalize functional call aliases so all downstream
+        # conversions only need to handle the canonical `F.xxx` form.
+        result = self._normalize_functional_aliases(source)
+
         # Step 1: Convert imports
-        result = self._convert_imports(source)
+        result = self._convert_imports(result)
 
         # Step 2: Convert class definitions (nn.Module → tf.keras.Model)
         result = self._convert_class_definitions(result)
@@ -132,6 +136,26 @@ class ModelConverter:
         result = self._cleanup(result)
 
         return result
+
+    # ────────────────────────────────────────
+    # Step 0: Normalize aliases
+    # ────────────────────────────────────────
+
+    @staticmethod
+    def _normalize_functional_aliases(source: str) -> str:
+        """Normalize functional call aliases to canonical F.xxx form.
+
+        Converts:
+            torch.nn.functional.xxx(...)  → F.xxx(...)
+            nn.functional.xxx(...)        → F.xxx(...)
+            torch.nn.Module               → nn.Module  (for class defs)
+
+        This ensures all downstream conversion logic only handles `F.xxx`.
+        """
+        source = re.sub(r"\btorch\.nn\.functional\.", "F.", source)
+        source = re.sub(r"\bnn\.functional\.", "F.", source)
+        source = re.sub(r"\btorch\.nn\.Module\b", "nn.Module", source)
+        return source
 
     # ────────────────────────────────────────
     # Import conversion
@@ -1108,7 +1132,8 @@ class ModelConverter:
         """
         # Match F.pad calls with their full arguments
         # Supports both tuple (1,1,1,1) and list [1,1,1,1] syntax
-        pattern = r"F\.pad\s*\(\s*(\w+)\s*,\s*[\(\[]([^\])]*)[\)\]](?:\s*,\s*([^)]*))?\)"
+        # First arg can be any expression (variable, function call, attribute, etc.)
+        pattern = r"F\.pad\s*\(\s*([\w.]+(?:\([^)]*\))?)\s*,\s*[\(\[]([^\])]*)[\)\]](?:\s*,\s*([^)]*))?\)"
 
         def _replace_pad(match: re.Match) -> str:
             tensor_name = match.group(1)
@@ -1205,47 +1230,182 @@ class ModelConverter:
     # Tensor method conversion
     # ────────────────────────────────────────
 
+    def _convert_method_to_func(
+        self,
+        source: str,
+        method: str,
+        tf_func: str,
+        args_transform=None,
+        wrap_args: str | None = None,
+    ) -> str:
+        """Generic converter: expr.method(args) → tf_func(expr, args).
+
+        Uses backward scanning to correctly handle complex expressions as
+        the receiver (function calls, parenthesized exprs, chained attrs).
+
+        Args:
+            source: Source code string.
+            method: PyTorch method name (e.g. "view", "sum").
+            tf_func: TF function name (e.g. "tf.reshape", "tf.reduce_sum").
+            args_transform: Optional callable(args_str) → transformed_args.
+            wrap_args: If set, wraps positional args: e.g. "[]" turns
+                `args` into `[args]`.
+        """
+        # Find all `.method(` occurrences
+        pattern = re.compile(r"\." + re.escape(method) + r"\s*\(")
+        result = []
+        last_end = 0
+
+        for m in pattern.finditer(source):
+            dot_pos = m.start()  # position of the `.`
+            open_paren = m.end() - 1  # position of `(`
+
+            # Extract the expression preceding `.method(`
+            expr, expr_start = self._scan_preceding_expr(source, dot_pos)
+            if not expr:
+                continue
+            # Skip already-converted tf.xxx calls matching as receiver
+            if expr.startswith("tf.") and expr.count("(") == 0:
+                continue
+
+            # Find the matching closing paren for args
+            depth = 1
+            i = open_paren + 1
+            while i < len(source) and depth > 0:
+                if source[i] == "(":
+                    depth += 1
+                elif source[i] == ")":
+                    depth -= 1
+                i += 1
+            if depth != 0:
+                continue
+
+            args_str = source[open_paren + 1:i - 1].strip()
+
+            # Transform args if needed
+            if args_transform:
+                args_str = args_transform(args_str)
+            if wrap_args and args_str:
+                args_str = f"{wrap_args[0]}{args_str}{wrap_args[1]}"
+
+            # Build replacement
+            if args_str:
+                replacement = f"{tf_func}({expr}, {args_str})"
+            else:
+                replacement = f"{tf_func}({expr})"
+
+            result.append(source[last_end:expr_start])
+            result.append(replacement)
+            last_end = i
+
+        result.append(source[last_end:])
+        return "".join(result)
+
     def _convert_tensor_methods(self, source: str) -> str:
-        """Convert tensor methods like .view(), .permute(), etc."""
-        # .view() → tf.reshape()
-        source = re.sub(
-            r"(\w+)\.view\s*\(([^)]*)\)",
-            r"tf.reshape(\1, [\2])",
-            source,
-        )
+        """Convert tensor methods like .view(), .permute(), etc.
 
-        # .permute() → tf.transpose()
-        source = re.sub(
-            r"(\w+)\.permute\s*\(([^)]*)\)",
-            r"tf.transpose(\1, perm=[\2])",
-            source,
-        )
+        Conversion order matters for chains like `(a-b).abs().mean()`:
+        1. First: no-arg methods (.abs, .exp, ...) and simple transforms
+           (.contiguous, .detach, .clone, type casts, device ops)
+           These produce clean expressions for subsequent steps.
+        2. Then: arg-taking methods (.view, .sum, .mean, .clamp, ...)
+           These can now match function-call results like tf.abs(x).
+        """
+        # ── Phase 1: No-arg transforms (innermost first) ──
 
-        # .transpose(a, b) → tf.transpose()
-        source = re.sub(
-            r"(\w+)\.transpose\s*\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)",
-            r"tf.transpose(\1, perm=[\2, \3])",
-            source,
-        )
+        # .contiguous() → remove (no-op in TF)
+        source = re.sub(r"\.contiguous\(\)", "", source)
+
+        # Device operations (no-op in TF) — strip .cuda()/.cpu()/.to(...)
+        for dev_suffix in (".cuda()", ".cpu()"):
+            source = source.replace(dev_suffix, "")
+        source = re.sub(r"\.to\s*\([^)]*\)", "", source)
+
+        # .item() → .numpy()
+        source = re.sub(r"\.item\(\)", ".numpy()", source)
+
+        # .detach() → tf.stop_gradient
+        source = self._convert_method_to_func(source, "detach", "tf.stop_gradient")
+
+        # .clone() → tf.identity
+        source = self._convert_method_to_func(source, "clone", "tf.identity")
+
+        # Type casting: .float() → tf.cast(x, tf.float32), etc.
+        cast_map = {
+            "float": "tf.float32",
+            "long": "tf.int64",
+            "int": "tf.int32",
+            "half": "tf.float16",
+            "bool": "tf.bool",
+            "double": "tf.float64",
+        }
+        for pt_method, tf_dtype in cast_map.items():
+            suffix = f".{pt_method}()"
+            while suffix in source:
+                pos = source.find(suffix)
+                expr, expr_start = self._scan_preceding_expr(source, pos)
+                if expr:
+                    source = (source[:expr_start]
+                              + f"tf.cast({expr}, {tf_dtype})"
+                              + source[pos + len(suffix):])
+                else:
+                    break
+
+        # No-arg tensor methods: x.abs() → tf.abs(x), (expr).abs() → tf.abs(expr)
+        noarg_method_map = {
+            "abs": "tf.abs",
+            "exp": "tf.exp",
+            "log": "tf.math.log",
+            "sqrt": "tf.math.sqrt",
+            "neg": "tf.negative",
+            "sign": "tf.sign",
+            "ceil": "tf.math.ceil",
+            "floor": "tf.math.floor",
+            "round": "tf.math.round",
+            "sigmoid": "tf.math.sigmoid",
+            "tanh": "tf.math.tanh",
+            "relu": "tf.nn.relu",
+        }
+        for pt_method, tf_func in noarg_method_map.items():
+            source = self._convert_noarg_method(source, pt_method, tf_func)
+
+        # ── Phase 2: Arg-taking methods ──
+
+        def _rename_dim_keepdim(args: str) -> str:
+            args = re.sub(r"\bdim\s*=", "axis=", args)
+            args = re.sub(r"\bkeepdim\s*=", "keepdims=", args)
+            return args
+
+        # .view() → tf.reshape(x, [args])
+        source = self._convert_method_to_func(
+            source, "view", "tf.reshape", wrap_args="[]")
+
+        # .reshape() → tf.reshape(x, [args])
+        source = self._convert_method_to_func(
+            source, "reshape", "tf.reshape", wrap_args="[]")
+
+        # .permute() → tf.transpose(x, perm=[args])
+        source = self._convert_method_to_func(
+            source, "permute", "tf.transpose",
+            args_transform=lambda a: f"perm=[{a}]")
+
+        # .transpose(a, b) → tf.transpose(x, perm=[a, b])
+        source = self._convert_method_to_func(
+            source, "transpose", "tf.transpose",
+            args_transform=lambda a: f"perm=[{a}]")
 
         # .contiguous() → remove (no-op in TF)
         source = re.sub(r"\.contiguous\(\)", "", source)
 
         # .unsqueeze(dim) → tf.expand_dims(x, axis=dim)
-        # Use negative lookbehind to avoid matching tf.expand_dims(...) or similar
-        source = re.sub(
-            r"(?<!\.)(\w+)\.unsqueeze\s*\(([^)]*)\)",
-            lambda m: f"tf.expand_dims({m.group(1)}, axis={m.group(2)})" if m.group(1) != "tf" else m.group(0),
-            source,
-        )
+        source = self._convert_method_to_func(
+            source, "unsqueeze", "tf.expand_dims",
+            args_transform=lambda a: f"axis={a}")
 
         # .squeeze(dim) → tf.squeeze(x, axis=dim)
-        # Avoid re-matching already-converted tf.squeeze(...)
-        source = re.sub(
-            r"(?<!\.)(\w+)\.squeeze\s*\(([^)]*)\)",
-            lambda m: f"tf.squeeze({m.group(1)}, axis={m.group(2)})" if m.group(1) != "tf" else m.group(0),
-            source,
-        )
+        source = self._convert_method_to_func(
+            source, "squeeze", "tf.squeeze",
+            args_transform=lambda a: f"axis={a}" if a else "")
 
         # .flatten(start_dim) → tf.reshape
         def _replace_method_flatten(match: re.Match) -> str:
@@ -1271,49 +1431,21 @@ class ModelConverter:
             source,
         )
 
-        # .mean(dim) / .sum(dim)
-        def _replace_reduce(tf_func):
-            def _replacer(match):
-                tensor = match.group(1)
-                args = match.group(2)
-                # Rename dim= → axis=, keepdim= → keepdims= inline
-                args = re.sub(r"\bdim\s*=", "axis=", args)
-                args = re.sub(r"\bkeepdim\s*=", "keepdims=", args)
-                return f"{tf_func}({tensor}, {args})"
-            return _replacer
-
-        source = re.sub(
-            r"(\w+)\.mean\s*\(([^)]*)\)",
-            _replace_reduce("tf.reduce_mean"),
-            source,
-        )
-        source = re.sub(
-            r"(\w+)\.sum\s*\(([^)]*)\)",
-            _replace_reduce("tf.reduce_sum"),
-            source,
-        )
+        # .mean(dim) / .sum(dim) / .max(dim) / .min(dim)
+        source = self._convert_method_to_func(
+            source, "mean", "tf.reduce_mean", args_transform=_rename_dim_keepdim)
+        source = self._convert_method_to_func(
+            source, "sum", "tf.reduce_sum", args_transform=_rename_dim_keepdim)
 
         # .clamp(min, max) → tf.clip_by_value
-        source = re.sub(
-            r"(\w+)\.clamp\s*\(\s*min\s*=\s*([^,)]+)\s*,\s*max\s*=\s*([^)]+)\)",
-            r"tf.clip_by_value(\1, \2, \3)",
-            source,
-        )
-        source = re.sub(
-            r"(\w+)\.clamp\s*\(\s*([^,)]+)\s*,\s*([^)]+)\s*\)",
-            r"tf.clip_by_value(\1, \2, \3)",
-            source,
-        )
-
-        # .detach() → tf.stop_gradient
-        source = re.sub(
-            r"(\w+)\.detach\(\)",
-            r"tf.stop_gradient(\1)",
-            source,
-        )
-
-        # .item() → .numpy()
-        source = re.sub(r"\.item\(\)", ".numpy()", source)
+        def _clamp_args(args: str) -> str:
+            args = re.sub(r"\bmin\s*=", "clip_value_min=", args)
+            args = re.sub(r"\bmax\s*=", "clip_value_max=", args)
+            return args
+        source = self._convert_method_to_func(
+            source, "clamp", "tf.clip_by_value", args_transform=_clamp_args)
+        source = self._convert_method_to_func(
+            source, "clip", "tf.clip_by_value", args_transform=_clamp_args)
 
         # .size(dim) → .shape[dim]
         source = re.sub(
@@ -1328,40 +1460,15 @@ class ModelConverter:
         )
 
         # .repeat() → tf.tile
-        source = re.sub(
-            r"(\w+)\.repeat\s*\(([^)]+)\)",
-            r"tf.tile(\1, [\2])",
-            source,
-        )
+        source = self._convert_method_to_func(
+            source, "repeat", "tf.tile", wrap_args="[]")
 
         # .expand() → tf.broadcast_to
-        source = re.sub(
-            r"(\w+)\.expand\s*\(([^)]+)\)",
-            r"tf.broadcast_to(\1, [\2])",
-            source,
-        )
+        source = self._convert_method_to_func(
+            source, "expand", "tf.broadcast_to", wrap_args="[]")
 
-        # .clone() → tf.identity
-        source = re.sub(r"(\w+)\.clone\(\)", r"tf.identity(\1)", source)
-
-        # Type casting
-        source = re.sub(r"(\w+)\.float\(\)", r"tf.cast(\1, tf.float32)", source)
-        source = re.sub(r"(\w+)\.long\(\)", r"tf.cast(\1, tf.int64)", source)
-        source = re.sub(r"(\w+)\.int\(\)", r"tf.cast(\1, tf.int32)", source)
-        source = re.sub(r"(\w+)\.half\(\)", r"tf.cast(\1, tf.float16)", source)
-        source = re.sub(r"(\w+)\.bool\(\)", r"tf.cast(\1, tf.bool)", source)
-
-        # Device operations (no-op in TF)
-        source = re.sub(r"(\w+)\.to\s*\([^)]*\)", r"\1", source)
-        source = re.sub(r"(\w+)\.cuda\([^)]*\)", r"\1", source)
-        source = re.sub(r"(\w+)\.cpu\(\)", r"\1", source)
-
-        # .numel() → tf.size(x)
-        source = re.sub(
-            r"(\w+)\.numel\(\)",
-            r"tf.size(\1)",
-            source,
-        )
+        # .numel() → tf.size
+        source = self._convert_method_to_func(source, "numel", "tf.size")
 
         # model.parameters() → model.trainable_variables
         source = re.sub(
@@ -1377,41 +1484,107 @@ class ModelConverter:
             source,
         )
 
-        # No-arg tensor methods that become tf.xxx(tensor)
-        # Handles both `x.abs()` and `(expr).abs()` patterns
-        noarg_method_map = {
-            "abs": "tf.abs",
-            "exp": "tf.exp",
-            "log": "tf.math.log",
-            "sqrt": "tf.math.sqrt",
-            "neg": "tf.negative",
-            "sign": "tf.sign",
-            "ceil": "tf.math.ceil",
-            "floor": "tf.math.floor",
-            "round": "tf.math.round",
-            "sigmoid": "tf.math.sigmoid",
-            "tanh": "tf.math.tanh",
-            "relu": "tf.nn.relu",
-        }
-        for pt_method, tf_func in noarg_method_map.items():
-            # Match expr.method() where expr is either a word or (parenthesized expr)
-            # Pattern 1: (expr).method()
-            def _replace_paren_noarg(m, _tf=tf_func):
-                return f"{_tf}({m.group(1)})"
-
-            source = re.sub(
-                r"\(([^)]+)\)\." + re.escape(pt_method) + r"\(\)",
-                _replace_paren_noarg,
-                source,
-            )
-            # Pattern 2: var.method()  (simple variable name)
-            source = re.sub(
-                r"(\w+)\." + re.escape(pt_method) + r"\(\)",
-                lambda m, _tf=tf_func: f"{_tf}({m.group(1)})",
-                source,
-            )
-
         return source
+
+    def _convert_noarg_method(self, source: str, method: str, tf_func: str) -> str:
+        """Convert x.method() / (expr).method() → tf_func(x) / tf_func(expr).
+
+        Uses backward scanning from each `.method()` match to find the
+        full preceding expression, handling nested parens/brackets and
+        function call chains like `tf.abs(x).method()`.
+        """
+        suffix = f".{method}()"
+        result = []
+        i = 0
+        while i < len(source):
+            pos = source.find(suffix, i)
+            if pos == -1:
+                result.append(source[i:])
+                break
+            # Extract the expression preceding `.method()`
+            expr_end = pos
+            expr, expr_start = self._scan_preceding_expr(source, expr_end)
+            if expr:
+                result.append(source[i:expr_start])
+                result.append(f"{tf_func}({expr})")
+                i = pos + len(suffix)
+            else:
+                result.append(source[i:pos + len(suffix)])
+                i = pos + len(suffix)
+        return "".join(result)
+
+    @staticmethod
+    def _scan_preceding_expr(source: str, end: int) -> tuple[str, int]:
+        """Scan backwards from `end` to find the full expression.
+
+        Returns (expr_string, start_index) or ("", end) on failure.
+        Handles:
+            - Simple variables:     `x`
+            - Dotted names:         `self.layer`
+            - Function calls:       `fn(...)`, `tf.abs(...)`
+            - Paren expressions:    `(a - b)`
+            - Chained calls:        `self.fn(x).attr`
+        """
+        if end <= 0:
+            return "", end
+        j = end - 1
+        # Skip trailing whitespace
+        while j >= 0 and source[j] in " \t":
+            j -= 1
+        if j < 0:
+            return "", end
+
+        # If preceded by ), we need to match backwards to the opening (
+        if source[j] == ")":
+            depth = 1
+            k = j - 1
+            while k >= 0 and depth > 0:
+                if source[k] == ")":
+                    depth += 1
+                elif source[k] == "(":
+                    depth -= 1
+                k -= 1
+            if depth != 0:
+                return "", end
+            # k is now one before the opening '('
+            # Continue scanning backwards for function name / dotted access
+            k2 = k
+            while k2 >= 0 and source[k2] in " \t":
+                k2 -= 1
+            if k2 >= 0 and (source[k2].isalnum() or source[k2] in "_.]"):
+                # There's a function name before the paren
+                inner_expr, inner_start = ModelConverter._scan_preceding_expr(source, k2 + 1)
+                if inner_expr:
+                    return source[inner_start:j + 1], inner_start
+            # Bare parenthesized expression
+            return source[k + 1:j + 1], k + 1
+        elif source[j] == "]":
+            # Bracket indexing: scan back to matching [
+            depth = 1
+            k = j - 1
+            while k >= 0 and depth > 0:
+                if source[k] == "]":
+                    depth += 1
+                elif source[k] == "[":
+                    depth -= 1
+                k -= 1
+            if depth != 0:
+                return "", end
+            inner_expr, inner_start = ModelConverter._scan_preceding_expr(source, k + 1)
+            if inner_expr:
+                return source[inner_start:j + 1], inner_start
+            return source[k + 1:j + 1], k + 1
+        elif source[j].isalnum() or source[j] == "_":
+            # Identifier (possibly dotted: self.layer, tf.abs)
+            k = j
+            while k >= 0 and (source[k].isalnum() or source[k] in "_."):
+                k -= 1
+            start = k + 1
+            # Trim trailing dots
+            expr = source[start:j + 1].rstrip(".")
+            return expr, start
+        else:
+            return "", end
 
     # ────────────────────────────────────────
     # torch.* operations conversion
