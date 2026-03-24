@@ -346,18 +346,33 @@ class ModelConverter:
 
         # In channels_first mode, pooling/upsampling layers also need data_format
         if self.channels_first and ("Pool" in pt_layer or "Upsamp" in pt_layer):
-
-            def _add_pool_data_format(match: re.Match) -> str:
-                call = match.group(1)
-                if "data_format" in call:
-                    return call + ")"
-                return call + ", data_format='channels_first')"
-
-            source = re.sub(
-                r"(" + re.escape(tf_layer) + r"\([^)]*)\)",
-                _add_pool_data_format,
-                source,
-            )
+            # Use paren-depth aware matching to handle nested parens like size=(2, 2)
+            marker = tf_layer + "("
+            result_parts = []
+            idx = 0
+            while idx < len(source):
+                pos = source.find(marker, idx)
+                if pos == -1:
+                    result_parts.append(source[idx:])
+                    break
+                result_parts.append(source[idx:pos])
+                # Find the matching closing paren
+                depth = 1
+                j = pos + len(marker)
+                while j < len(source) and depth > 0:
+                    if source[j] == "(":
+                        depth += 1
+                    elif source[j] == ")":
+                        depth -= 1
+                    j += 1
+                # j points one past the closing ')'
+                call_content = source[pos + len(marker):j - 1]
+                if "data_format" not in call_content:
+                    result_parts.append(f"{marker}{call_content}, data_format='channels_first')")
+                else:
+                    result_parts.append(source[pos:j])
+                idx = j
+            source = "".join(result_parts)
 
         return source
 
@@ -574,19 +589,29 @@ class ModelConverter:
 
         # Add data_format for Conv layers
         if self.channels_first:
-            # Insert data_format='channels_first' before the closing paren
-            # Use a function to avoid adding it twice on repeated calls
-            def _add_conv_data_format(match: re.Match) -> str:
-                call = match.group(1)
-                if "data_format" in call:
-                    return call + ")"
-                return call + ", data_format='channels_first')"
-
-            source = re.sub(
-                r"(tf\.keras\.layers\.Conv\w+\([^)]+)\)",
-                _add_conv_data_format,
-                source,
-            )
+            # Use paren-depth aware matching (same as pool/upsample fix)
+            conv_marker_pattern = re.compile(r"tf\.keras\.layers\.Conv\w+\(")
+            conv_result_parts = []
+            cidx = 0
+            for cm in conv_marker_pattern.finditer(source):
+                conv_result_parts.append(source[cidx:cm.start()])
+                cmarker = cm.group(0)
+                depth = 1
+                cj = cm.end()
+                while cj < len(source) and depth > 0:
+                    if source[cj] == "(":
+                        depth += 1
+                    elif source[cj] == ")":
+                        depth -= 1
+                    cj += 1
+                call_inner = source[cm.end():cj - 1]
+                if "data_format" not in call_inner:
+                    conv_result_parts.append(f"{cmarker}{call_inner}, data_format='channels_first')")
+                else:
+                    conv_result_parts.append(source[cm.start():cj])
+                cidx = cj
+            conv_result_parts.append(source[cidx:])
+            source = "".join(conv_result_parts)
         # else: channels_last (NHWC) is the TF default, no explicit param needed
 
         return source
