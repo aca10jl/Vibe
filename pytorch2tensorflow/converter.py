@@ -54,6 +54,10 @@ class ModelConverter:
         # Each entry is (attr_pattern, pad_value, ndim) where attr_pattern
         # matches the attribute call (e.g. "self.conv") in the call() method
         self._explicit_padding_convs: list[tuple[str, int, int]] = []
+        # Flags for runtime helper function injection
+        self._needs_pad_helper = False
+        self._needs_interpolate_helper = False
+        self._needs_flatten_helper = False
 
     # ────────────────────────────────────────
     # Public API
@@ -94,6 +98,9 @@ class ModelConverter:
         """
         self._custom_layers_needed.clear()
         self._explicit_padding_convs.clear()
+        self._needs_pad_helper = False
+        self._needs_interpolate_helper = False
+        self._needs_flatten_helper = False
 
         # Step 0: Normalize functional call aliases so all downstream
         # conversions only need to handle the canonical `F.xxx` form.
@@ -1002,10 +1009,7 @@ class ModelConverter:
             start_dim = match.group(2).strip() if match.group(2) else "0"
             if start_dim == "1":
                 if self.channels_first:
-                    # NCHW mode: data already in correct order, just reshape
                     return f"tf.reshape({tensor}, [tf.shape({tensor})[0], -1])"
-                # Transpose NHWC→NCHW before flatten so element order
-                # matches what the Dense/Linear kernel expects.
                 return (
                     f"tf.reshape("
                     f"tf.transpose({tensor}, [0, 3, 1, 2]) "
@@ -1015,11 +1019,15 @@ class ModelConverter:
             elif start_dim == "0":
                 return f"tf.reshape({tensor}, [-1])"
             else:
-                return f"tf.reshape({tensor}, [*tf.shape({tensor})[:{start_dim}], -1])"
+                # Variable or non-literal start_dim — use runtime helper
+                self._needs_flatten_helper = True
+                cf_str = "True" if self.channels_first else "False"
+                return f"_pt_flatten({tensor}, {start_dim}, channels_first={cf_str})"
 
         # Match torch.flatten(x, start_dim) or torch.flatten(x)
+        # start_dim can be a digit or a variable/expression
         source = re.sub(
-            r"torch\.flatten\s*\(\s*(\w+)\s*(?:,\s*(\d+))?\s*\)",
+            r"torch\.flatten\s*\(\s*(\w+)\s*(?:,\s*([\w.]+))?\s*\)",
             _replace_flatten,
             source,
         )
@@ -1093,18 +1101,41 @@ class ModelConverter:
             - Input is NCHW
         TF: tf.image.resize(x, size=[H,W], method='bilinear')
             - Input is NHWC
+
+        When scale_factor is a variable/expression (not a simple literal),
+        we emit a call to a runtime helper `_pt_interpolate_size()`.
         """
-        # Handle scale_factor by replacing with a helper expression
-        # scale_factor=N → size=tf.shape(x)[1:3]*N  (for NHWC spatial dims)
-        pattern = r"F\.interpolate\s*\(\s*(\w+)\s*,\s*scale_factor\s*=\s*(\w+)"
+        channels_first = self.channels_first
+
+        # Spatial dim indices depend on data format
+        if channels_first:
+            h_idx, w_idx = 2, 3  # NCHW
+        else:
+            h_idx, w_idx = 1, 2  # NHWC
+
+        # Handle scale_factor — may be literal or variable/expression
+        # Capture scale_factor value which can be any expression (number, var, tuple, etc.)
+        pattern = r"F\.interpolate\s*\(\s*(\w+)\s*,\s*scale_factor\s*=\s*([^,)]+)"
 
         def _replace_scale_factor(match: re.Match) -> str:
             tensor = match.group(1)
-            factor = match.group(2)
+            factor = match.group(2).strip()
+
+            # Simple numeric literal — inline the computation
+            if re.match(r"^-?\d+(\.\d+)?$", factor):
+                return (
+                    f"tf.image.resize({tensor}, "
+                    f"size=[tf.shape({tensor})[{h_idx}] * {factor}, "
+                    f"tf.shape({tensor})[{w_idx}] * {factor}]"
+                )
+
+            # Variable/expression — use runtime helper for safety
+            self._needs_interpolate_helper = True
+            cf_str = "True" if channels_first else "False"
             return (
                 f"tf.image.resize({tensor}, "
-                f"size=[tf.shape({tensor})[1] * {factor}, "
-                f"tf.shape({tensor})[2] * {factor}]"
+                f"size=_pt_scale_factor_to_size({tensor}, {factor}, "
+                f"channels_first={cf_str})"
             )
 
         source = re.sub(pattern, _replace_scale_factor, source)
@@ -1129,71 +1160,154 @@ class ModelConverter:
             F.pad(x, (left, right, top, bottom), mode='reflect')
         TensorFlow tf.pad uses nested paddings for each dimension (NHWC):
             tf.pad(x, [[0,0], [top,bottom], [left,right], [0,0]], mode='REFLECT')
+
+        When the padding argument is a variable/expression (not inline literal),
+        we emit a call to a runtime helper `_pt_padding_to_tf()` that converts
+        PyTorch flat padding format to TF nested padding format at runtime.
         """
-        # Match F.pad calls with their full arguments
-        # Supports both tuple (1,1,1,1) and list [1,1,1,1] syntax
-        # First arg can be any expression (variable, function call, attribute, etc.)
-        pattern = r"F\.pad\s*\(\s*([\w.]+(?:\([^)]*\))?)\s*,\s*[\(\[]([^\])]*)[\)\]](?:\s*,\s*([^)]*))?\)"
+        channels_first = self.channels_first
 
-        def _replace_pad(match: re.Match) -> str:
-            tensor_name = match.group(1)
-            pad_values_str = match.group(2)
-            extra_args = match.group(3) or ""
+        def _convert_pad_call(match: re.Match) -> str:
+            """Replace a single F.pad(...) call."""
+            full_call = match.group(0)
+            # Find the opening paren after F.pad
+            start = match.start()
+            paren_start = full_call.index("(")
 
-            # Parse padding values
-            pad_values = [v.strip() for v in pad_values_str.split(",") if v.strip()]
+            # Parse all arguments using paren-aware splitting
+            inner = full_call[paren_start + 1:-1]  # strip outer parens
+            args = self._split_args_paren_aware(inner)
+            if len(args) < 2:
+                return full_call  # malformed, leave as-is
 
-            # Build TF paddings — format depends on channels_first setting.
-            # PyTorch pad order: (left, right, top, bottom[, front, back])
-            # from innermost dim to outermost dim.
-            #
-            # NCHW: [batch, channels, height, width]
-            # NHWC: [batch, height, width, channels]
-            use_nchw = self.channels_first
-
-            if len(pad_values) == 2:
-                # 1D: (left, right) → pad last dim (W)
-                if use_nchw:
-                    paddings = f"[[0, 0], [0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}]]"
-                else:
-                    paddings = f"[[0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}], [0, 0]]"
-            elif len(pad_values) == 4:
-                left, right, top, bottom = pad_values
-                if use_nchw:
-                    # NCHW: [N, C, H, W]
-                    paddings = f"[[0, 0], [0, 0], [{top}, {bottom}], [{left}, {right}]]"
-                else:
-                    # NHWC: [N, H, W, C]
-                    paddings = f"[[0, 0], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
-            elif len(pad_values) == 6:
-                left, right, top, bottom, front, back = pad_values
-                if use_nchw:
-                    paddings = f"[[0, 0], [0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}]]"
-                else:
-                    paddings = f"[[0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
-            else:
-                # Fallback: keep as expression (may be dynamic)
-                paddings = f"({pad_values_str})"
+            tensor_expr = args[0].strip()
+            pad_arg_raw = args[1].strip()
+            extra_args = args[2:]
 
             # Parse mode and value from extra args
             mode = "CONSTANT"
             constant_values = ""
-            if extra_args:
-                # Extract mode
-                mode_match = re.search(r"""mode\s*=\s*['"](\w+)['"]""", extra_args)
+            for arg in extra_args:
+                arg = arg.strip()
+                mode_match = re.match(r"""mode\s*=\s*['"](\w+)['"]""", arg)
                 if mode_match:
                     pt_mode = mode_match.group(1)
                     mode = PADDING_MAP.get(pt_mode, pt_mode.upper())
-
-                # Extract value (for constant padding)
-                val_match = re.search(r"value\s*=\s*([^,)]+)", extra_args)
+                    continue
+                # Positional mode (string literal without keyword)
+                pos_mode_match = re.match(r"""^['"](\w+)['"]$""", arg)
+                if pos_mode_match:
+                    pt_mode = pos_mode_match.group(1)
+                    mode = PADDING_MAP.get(pt_mode, pt_mode.upper())
+                    continue
+                val_match = re.match(r"value\s*=\s*(.+)", arg)
                 if val_match and mode == "CONSTANT":
                     constant_values = f", constant_values={val_match.group(1).strip()}"
 
-            return f"tf.pad({tensor_name}, {paddings}, mode='{mode}'{constant_values})"
+            mode_str = f", mode='{mode}'" if mode != "CONSTANT" else ""
 
-        source = re.sub(pattern, _replace_pad, source)
-        return source
+            # Try to parse inline literal: (1,1,1,1) or [1,1,1,1]
+            inline_match = re.match(r"[\(\[](.*?)[\)\]]$", pad_arg_raw)
+            if inline_match:
+                pad_values_str = inline_match.group(1)
+                pad_values = [v.strip() for v in pad_values_str.split(",") if v.strip()]
+
+                # Check if all values are simple literals/numbers (statically resolvable)
+                all_simple = all(
+                    re.match(r"^-?\d+(\.\d+)?$", v) for v in pad_values
+                )
+                if all_simple:
+                    return self._build_static_tf_pad(
+                        tensor_expr, pad_values, mode, constant_values, channels_first
+                    )
+
+            # Dynamic/variable padding — use runtime helper
+            self._needs_pad_helper = True
+            cf_str = "True" if channels_first else "False"
+            return (
+                f"tf.pad({tensor_expr}, "
+                f"_pt_padding_to_tf({pad_arg_raw}, len({tensor_expr}.shape), "
+                f"channels_first={cf_str})"
+                f"{mode_str}{constant_values})"
+            )
+
+        # Match F.pad(...) with balanced parentheses
+        result = []
+        i = 0
+        while i < len(source):
+            # Look for F.pad(
+            match = re.search(r"F\.pad\s*\(", source[i:])
+            if not match:
+                result.append(source[i:])
+                break
+
+            # Add everything before the match
+            result.append(source[i:i + match.start()])
+
+            # Find balanced closing paren
+            call_start = i + match.start()
+            paren_pos = i + match.end() - 1  # position of '('
+            depth = 1
+            j = paren_pos + 1
+            while j < len(source) and depth > 0:
+                if source[j] == "(":
+                    depth += 1
+                elif source[j] == ")":
+                    depth -= 1
+                j += 1
+
+            full_call = source[call_start:j]
+            fake_match = re.match(r".*", full_call)  # dummy match for group(0)
+
+            class _FakeMatch:
+                def __init__(self, text):
+                    self._text = text
+                def group(self, n=0):
+                    return self._text
+                def start(self):
+                    return 0
+                def end(self):
+                    return len(self._text)
+
+            converted = _convert_pad_call(_FakeMatch(full_call))
+            result.append(converted)
+            i = j
+
+        return "".join(result)
+
+    @staticmethod
+    def _build_static_tf_pad(
+        tensor: str,
+        pad_values: list,
+        mode: str,
+        constant_values: str,
+        channels_first: bool,
+    ) -> str:
+        """Build tf.pad() with statically known padding values."""
+        use_nchw = channels_first
+        mode_str = f", mode='{mode}'" if mode != "CONSTANT" else ""
+
+        if len(pad_values) == 2:
+            if use_nchw:
+                paddings = f"[[0, 0], [0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}]]"
+            else:
+                paddings = f"[[0, 0], [0, 0], [{pad_values[0]}, {pad_values[1]}], [0, 0]]"
+        elif len(pad_values) == 4:
+            left, right, top, bottom = pad_values
+            if use_nchw:
+                paddings = f"[[0, 0], [0, 0], [{top}, {bottom}], [{left}, {right}]]"
+            else:
+                paddings = f"[[0, 0], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
+        elif len(pad_values) == 6:
+            left, right, top, bottom, front, back = pad_values
+            if use_nchw:
+                paddings = f"[[0, 0], [0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}]]"
+            else:
+                paddings = f"[[0, 0], [{front}, {back}], [{top}, {bottom}], [{left}, {right}], [0, 0]]"
+        else:
+            paddings = f"[{', '.join(pad_values)}]"
+
+        return f"tf.pad({tensor}, {paddings}{mode_str}{constant_values})"
 
     def _convert_dropout(self, source: str, pt_func: str) -> str:
         """Convert F.dropout to tf.nn.dropout.
@@ -1810,6 +1924,87 @@ class ReflectionPadding2D(tf.keras.layers.Layer):
         config = super().get_config()
         config["padding"] = self.padding
         return config
+
+'''
+
+        # Runtime helper functions for dynamic parameter conversion
+        if self._needs_pad_helper:
+            custom_code += '''
+
+def _pt_padding_to_tf(padding, ndim=4, channels_first=False):
+    """Convert PyTorch flat padding to TensorFlow nested padding at runtime.
+
+    PyTorch padding is a flat tuple: (left, right, top, bottom[, front, back])
+    from innermost dim to outermost dim.
+    TF padding is nested: [[before_0, after_0], [before_1, after_1], ...]
+    for each dimension (NHWC or NCHW).
+    """
+    import tensorflow as tf
+    if isinstance(padding, (int, float)):
+        padding = (int(padding), int(padding))
+    padding = list(padding)
+    n_pad_dims = len(padding) // 2
+    # Build pairs: [(left, right), (top, bottom), ...]
+    pairs = [[padding[2 * i], padding[2 * i + 1]] for i in range(n_pad_dims)]
+    # Reverse order: PyTorch pads from innermost to outermost
+    pairs = pairs[::-1]
+    # Build full padding for each dim (ndim dimensions)
+    full = [[0, 0] for _ in range(ndim)]
+    if channels_first:
+        # NCHW: spatial dims are [2, 3, ...] from the end
+        for i, pair in enumerate(pairs):
+            dim_idx = ndim - 1 - i  # innermost spatial dim first
+            full[dim_idx] = pair
+    else:
+        # NHWC: spatial dims are [1, 2, ...] (skip batch), channel is last
+        for i, pair in enumerate(pairs):
+            dim_idx = ndim - 2 - i  # skip last (channel) dim
+            full[dim_idx] = pair
+    return tf.constant(full, dtype=tf.int32)
+
+'''
+
+        if self._needs_interpolate_helper:
+            custom_code += '''
+
+def _pt_scale_factor_to_size(tensor, scale_factor, channels_first=False):
+    """Convert PyTorch scale_factor to TF size=[H, W] at runtime.
+
+    Computes the target spatial size by multiplying current spatial dimensions
+    by the scale_factor.
+    """
+    import tensorflow as tf
+    shape = tf.shape(tensor)
+    if channels_first:
+        h, w = shape[2], shape[3]
+    else:
+        h, w = shape[1], shape[2]
+    if isinstance(scale_factor, (tuple, list)):
+        sh, sw = scale_factor[0], scale_factor[1]
+    else:
+        sh, sw = scale_factor, scale_factor
+    return [h * sh, w * sw]
+
+'''
+
+        if self._needs_flatten_helper:
+            custom_code += '''
+
+def _pt_flatten(tensor, start_dim=0, channels_first=False):
+    """Convert PyTorch flatten with variable start_dim to TF reshape.
+
+    When start_dim is variable, we build the target shape dynamically.
+    For start_dim=1 on 4D NHWC tensors, transposes to NCHW first so that
+    element order matches PyTorch's Linear layer expectations.
+    """
+    import tensorflow as tf
+    if start_dim == 1 and len(tensor.shape) == 4 and not channels_first:
+        tensor = tf.transpose(tensor, [0, 3, 1, 2])
+    shape = tf.shape(tensor)
+    if start_dim == 0:
+        return tf.reshape(tensor, [-1])
+    leading = shape[:start_dim]
+    return tf.reshape(tensor, tf.concat([leading, [-1]], axis=0))
 
 '''
 
