@@ -889,8 +889,34 @@ class ModelConverter:
             source = source.replace(f"mode='{pt_mode}'", f"interpolation='{pt_mode}'")
             source = source.replace(f'mode="{pt_mode}"', f"interpolation='{pt_mode}'")
 
-        # Remove align_corners (not supported in TF UpSampling2D)
-        source = re.sub(r",?\s*align_corners\s*=\s*(True|False)", "", source)
+        # Remove align_corners from UpSampling2D calls (not supported in TF)
+        # Must handle both literals (True/False) and variable references.
+        # Only remove within UpSampling2D calls, not from function signatures.
+        upsample_marker = tf_layer + "("
+        us_result = []
+        us_idx = 0
+        while us_idx < len(source):
+            pos = source.find(upsample_marker, us_idx)
+            if pos == -1:
+                us_result.append(source[us_idx:])
+                break
+            us_result.append(source[us_idx:pos])
+            # Find matching closing paren
+            depth = 1
+            uj = pos + len(upsample_marker)
+            while uj < len(source) and depth > 0:
+                if source[uj] == "(":
+                    depth += 1
+                elif source[uj] == ")":
+                    depth -= 1
+                uj += 1
+            call_str = source[pos:uj]
+            # Remove align_corners=... from this specific call
+            call_str = re.sub(r",?\s*align_corners\s*=\s*\w+", "", call_str)
+            call_str = re.sub(r"\(\s*,", "(", call_str)  # clean leading comma
+            us_result.append(call_str)
+            us_idx = uj
+        source = "".join(us_result)
 
         return source
 
@@ -1403,8 +1429,9 @@ class ModelConverter:
             expr, expr_start = self._scan_preceding_expr(source, dot_pos)
             if not expr:
                 continue
-            # Skip already-converted tf.xxx calls matching as receiver
-            if expr.startswith("tf.") and expr.count("(") == 0:
+            # Skip already-converted tf.xxx / np.xxx module names as receiver
+            # e.g. "tf" in "tf.reshape(" or "tf.keras" in "tf.keras.layers.Dense("
+            if re.match(r"^(tf|np|math)(\.[\w]+)*$", expr):
                 continue
 
             # Find the matching closing paren for args
@@ -1623,6 +1650,14 @@ class ModelConverter:
             source,
         )
 
+        # Sequential indexing: self.xxx[N] → self.xxx.layers[N]
+        # PyTorch nn.Sequential supports [] indexing; TF Sequential uses .layers[]
+        source = re.sub(
+            r"(self\.\w+)\[(\d+)\]",
+            r"\1.layers[\2]",
+            source,
+        )
+
         return source
 
     def _convert_noarg_method(self, source: str, method: str, tf_func: str) -> str:
@@ -1719,6 +1754,15 @@ class ModelConverter:
             while k >= 0 and (source[k].isalnum() or source[k] in "_."):
                 k -= 1
             start = k + 1
+            # If the scanned token starts with '.', it's a method/attribute
+            # access on a preceding expression (e.g. `fn(args).method`).
+            # Recursively scan backwards to include the receiver expression.
+            if source[start] == "." and start > 0:
+                prev_expr, prev_start = ModelConverter._scan_preceding_expr(
+                    source, start
+                )
+                if prev_expr:
+                    return source[prev_start : j + 1], prev_start
             # Trim trailing dots
             expr = source[start:j + 1].rstrip(".")
             return expr, start
