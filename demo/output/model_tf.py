@@ -10,6 +10,39 @@ A standard UNet architecture with:
 
 import tensorflow as tf
 
+
+def _pt_padding_to_tf(padding, ndim=4, channels_first=False):
+    """Convert PyTorch flat padding to TensorFlow nested padding at runtime.
+
+    PyTorch padding is a flat tuple: (left, right, top, bottom[, front, back])
+    from innermost dim to outermost dim.
+    TF padding is nested: [[before_0, after_0], [before_1, after_1], ...]
+    for each dimension (NHWC or NCHW).
+    """
+    import tensorflow as tf
+    if isinstance(padding, (int, float)):
+        padding = (int(padding), int(padding))
+    padding = list(padding)
+    n_pad_dims = len(padding) // 2
+    # Build pairs: [(left, right), (top, bottom), ...]
+    pairs = [[padding[2 * i], padding[2 * i + 1]] for i in range(n_pad_dims)]
+    # Reverse order: PyTorch pads from innermost to outermost
+    pairs = pairs[::-1]
+    # Build full padding for each dim (ndim dimensions)
+    full = [[0, 0] for _ in range(ndim)]
+    if channels_first:
+        # NCHW: spatial dims are [2, 3, ...] from the end
+        for i, pair in enumerate(pairs):
+            dim_idx = ndim - 1 - i  # innermost spatial dim first
+            full[dim_idx] = pair
+    else:
+        # NHWC: spatial dims are [1, 2, ...] (skip batch), channel is last
+        for i, pair in enumerate(pairs):
+            dim_idx = ndim - 2 - i  # skip last (channel) dim
+            full[dim_idx] = pair
+    return tf.constant(full, dtype=tf.int32)
+
+
 # NOTE: This model was converted from PyTorch (NCHW) to TensorFlow (NHWC).
 # Input tensors should be in NHWC format (batch, height, width, channels).
 # Use nchw_to_nhwc() / nhwc_to_nchw() helpers if needed.
@@ -59,7 +92,8 @@ class Up(tf.keras.Model):
         # Pad x1 to match x2 spatial dimensions if needed
         diff_y = x2.shape[1] - x1.shape[1]
         diff_x = x2.shape[2] - x1.shape[2]
-        x1 = tf.pad(x1, [[0, 0], [diff_y // 2, diff_y - diff_y // 2], [diff_x // 2, diff_x - diff_x // 2], [0, 0]], mode='CONSTANT')
+        x1 = tf.pad(x1, _pt_padding_to_tf((diff_x // 2, diff_x - diff_x // 2,
+                         diff_y // 2, diff_y - diff_y // 2), len(x1.shape), channels_first=False))
 
         x = tf.concat([x2, x1], axis=-1)
         x = self.conv(x)
