@@ -59,6 +59,7 @@ class ModelConverter:
         self._needs_pad_helper = False
         self._needs_interpolate_helper = False
         self._needs_flatten_helper = False
+        self._needs_bilinear_upsample_helper = False
 
     # ────────────────────────────────────────
     # Public API
@@ -102,6 +103,7 @@ class ModelConverter:
         self._needs_pad_helper = False
         self._needs_interpolate_helper = False
         self._needs_flatten_helper = False
+        self._needs_bilinear_upsample_helper = False
 
         # Step 0: Normalize functional call aliases so all downstream
         # conversions only need to handle the canonical `F.xxx` form.
@@ -877,36 +879,17 @@ class ModelConverter:
 
         PyTorch: nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         TF:      tf.keras.layers.UpSampling2D(size=(2, 2), interpolation='bilinear')
+             or: BilinearUpsample2D(scale_factor=2, data_format='channels_first')
+                 when align_corners=True and mode='bilinear'
 
         Parameter mapping:
             scale_factor=N  → size=(N, N)
             mode='nearest'  → interpolation='nearest'
             mode='bilinear' → interpolation='bilinear'
-            align_corners   → removed (not supported in TF)
+            align_corners   → triggers BilinearUpsample2D when True with bilinear mode
         """
-        # scale_factor=N → size=(N, N)
-        # Handle both int and tuple forms
-        def _replace_scale_factor(match: re.Match) -> str:
-            factor = match.group(1).strip()
-            # If already a tuple like (2, 2), use as-is
-            if factor.startswith("("):
-                return f"size={factor}"
-            return f"size=({factor}, {factor})"
-
-        source = re.sub(
-            r"scale_factor\s*=\s*([^,)]+)",
-            _replace_scale_factor,
-            source,
-        )
-
-        # mode → interpolation
-        for pt_mode in ("nearest", "bilinear", "bicubic"):
-            source = source.replace(f"mode='{pt_mode}'", f"interpolation='{pt_mode}'")
-            source = source.replace(f'mode="{pt_mode}"', f"interpolation='{pt_mode}'")
-
-        # Remove align_corners from UpSampling2D calls (not supported in TF)
-        # Must handle both literals (True/False) and variable references.
-        # Only remove within UpSampling2D calls, not from function signatures.
+        # First, check if any call has align_corners=True with bilinear mode.
+        # If so, replace the entire call with BilinearUpsample2D.
         upsample_marker = tf_layer + "("
         us_result = []
         us_idx = 0
@@ -926,9 +909,38 @@ class ModelConverter:
                     depth -= 1
                 uj += 1
             call_str = source[pos:uj]
-            # Remove align_corners=... from this specific call
-            call_str = re.sub(r",?\s*align_corners\s*=\s*\w+", "", call_str)
-            call_str = re.sub(r"\(\s*,", "(", call_str)  # clean leading comma
+
+            # Check if this is bilinear + align_corners=True
+            has_bilinear = bool(re.search(r"mode\s*=\s*['\"]bilinear['\"]", call_str))
+            has_align_true = bool(re.search(r"align_corners\s*=\s*True", call_str))
+
+            if has_bilinear and has_align_true:
+                # Extract scale_factor
+                sf_match = re.search(r"scale_factor\s*=\s*([^,)]+)", call_str)
+                scale_factor = sf_match.group(1).strip() if sf_match else "2"
+                df_arg = ", data_format='channels_first'" if self.channels_first else ""
+                call_str = f"BilinearUpsample2D(scale_factor={scale_factor}{df_arg})"
+                self._needs_bilinear_upsample_helper = True
+            else:
+                # Standard conversion: scale_factor → size, mode → interpolation, strip align_corners
+                def _replace_scale_factor(match: re.Match) -> str:
+                    factor = match.group(1).strip()
+                    if factor.startswith("("):
+                        return f"size={factor}"
+                    return f"size=({factor}, {factor})"
+
+                call_str = re.sub(
+                    r"scale_factor\s*=\s*([^,)]+)",
+                    _replace_scale_factor,
+                    call_str,
+                )
+                for pt_mode in ("nearest", "bilinear", "bicubic"):
+                    call_str = call_str.replace(f"mode='{pt_mode}'", f"interpolation='{pt_mode}'")
+                    call_str = call_str.replace(f'mode="{pt_mode}"', f"interpolation='{pt_mode}'")
+                # Remove align_corners
+                call_str = re.sub(r",?\s*align_corners\s*=\s*\w+", "", call_str)
+                call_str = re.sub(r"\(\s*,", "(", call_str)  # clean leading comma
+
             us_result.append(call_str)
             us_idx = uj
         source = "".join(us_result)
@@ -1811,6 +1823,16 @@ class ModelConverter:
             source,
         )
 
+        # Dynamic shape unpacking: a, b, c, d = x.shape → a, b, c, d = tf.unstack(tf.shape(x))
+        # PyTorch .shape returns a Size (tuple-like) with concrete ints;
+        # TF .shape returns TensorShape with None for dynamic dims, breaking arithmetic.
+        # tf.unstack(tf.shape(x)) gives scalar tensors that support arithmetic.
+        source = re.sub(
+            r"(\w+(?:\s*,\s*\w+)+)\s*=\s*(\w+)\.shape\b(?!\[)",
+            r"\1 = tf.unstack(tf.shape(\2))",
+            source,
+        )
+
         # Sequential indexing: self.xxx[N] → self.xxx.layers[N]
         # PyTorch nn.Sequential supports [] indexing; TF Sequential uses .layers[]
         source = re.sub(
@@ -2216,6 +2238,44 @@ def _pt_scale_factor_to_size(tensor, scale_factor, channels_first=False):
     else:
         sh, sw = scale_factor, scale_factor
     return [h * sh, w * sw]
+
+'''
+
+        if self._needs_bilinear_upsample_helper:
+            custom_code += '''
+
+class BilinearUpsample2D(tf.keras.layers.Layer):
+    """Bilinear upsampling with align_corners=True support.
+
+    Equivalent to PyTorch nn.Upsample(scale_factor=N, mode='bilinear', align_corners=True).
+    TF's built-in UpSampling2D does not support align_corners, which causes
+    significant numerical differences for bilinear interpolation.
+    """
+
+    def __init__(self, scale_factor=2, data_format='channels_last', **kwargs):
+        super().__init__(**kwargs)
+        self.scale_factor = scale_factor
+        self.data_format = data_format
+
+    def call(self, x):
+        import tensorflow as tf
+        if self.data_format == 'channels_first':
+            # NCHW -> NHWC for resize
+            x = tf.transpose(x, [0, 2, 3, 1])
+        shape = tf.shape(x)
+        new_h = shape[1] * self.scale_factor
+        new_w = shape[2] * self.scale_factor
+        x = tf.compat.v1.image.resize_bilinear(x, [new_h, new_w], align_corners=True)
+        if self.data_format == 'channels_first':
+            # NHWC -> NCHW
+            x = tf.transpose(x, [0, 3, 1, 2])
+        return x
+
+    def get_config(self):
+        config = super().get_config()
+        config["scale_factor"] = self.scale_factor
+        config["data_format"] = self.data_format
+        return config
 
 '''
 

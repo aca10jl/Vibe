@@ -154,7 +154,7 @@ class PBExporter:
                 if len(inputs) == 1:
                     out = tf_model(inputs[0], training=False)
                 else:
-                    out = tf_model(inputs, training=False)
+                    out = tf_model(*inputs, training=False)
                 # Convert tuple/list outputs to dict for SavedModel signatures
                 if isinstance(out, (tuple, list)):
                     return {f"output_{i}": o for i, o in enumerate(out)}
@@ -227,7 +227,7 @@ class PBExporter:
                 ).get_concrete_function(input_specs[0])
             else:
                 concrete_fn = tf.function(
-                    lambda *x: tf_model(list(x), training=False)
+                    lambda *x: tf_model(*x, training=False)
                 ).get_concrete_function(*input_specs)
         else:
             concrete_fn = tf.function(

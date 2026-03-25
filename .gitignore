@@ -12,3 +12,6 @@ build/
 demo/output/saved_model/
 demo/output/*.pb
 demo/output/*.h5
+
+# Debug working directory
+debug/

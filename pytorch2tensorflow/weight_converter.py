@@ -719,10 +719,12 @@ class WeightConverter:
             # input channel (e.g. grayscale) have the same pattern.
             if "depthwise" in name_lower:
                 return self.TRANSPOSE_RULES["depthwise"]
-            if "conv" in name_lower or "weight" in name.split(".")[-1]:
-                # Check if it looks like a conv weight (not BN)
-                if array.shape[2] <= array.shape[0] and array.shape[3] <= array.shape[0]:
-                    return self.TRANSPOSE_RULES["conv2d"]
+            if "conv" in name_lower:
+                return self.TRANSPOSE_RULES["conv2d"]
+            if "weight" in name.split(".")[-1]:
+                # 4D weight not explicitly named conv — apply conv2d transpose
+                # unless it looks like a non-conv weight (e.g. BN gamma is 1D)
+                return self.TRANSPOSE_RULES["conv2d"]
         elif ndim == 3:
             if "conv" in name_lower:
                 return self.TRANSPOSE_RULES["conv1d"]

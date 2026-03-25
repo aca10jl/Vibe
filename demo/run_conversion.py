@@ -3,22 +3,24 @@
 一键转换脚本：将 PyTorch 模型转换为 TensorFlow 版本并导出 PB 模型
 
 用法:
+    # 默认 demo 模型
     python demo/run_conversion.py
-    python demo/run_conversion.py --channels-first   # 保持 NCHW 格式
-    python demo/run_conversion.py --model-class UNet  # 指定入口模型类
-    python demo/run_conversion.py --input-shapes "3,128,128"            # 单输入
-    python demo/run_conversion.py --input-shapes "3,128,128 1,128,128"  # 多输入
+    python demo/run_conversion.py --channels-first
 
-输入文件 (demo/pytorch_model/):
-    model.py          — PyTorch 模型定义
-    unet_weights.pth  — PyTorch 训练权重
+    # 自定义模型文件
+    python demo/run_conversion.py --pt-model path/to/model.py --model-class UNet
+    python demo/run_conversion.py --pt-model path/to/model.py --pt-weights path/to/weights.pth
 
-输出文件 (demo/output/):
+    # 自定义参数
+    python demo/run_conversion.py --model-args "in_channels=1, out_channels=2"
+    python demo/run_conversion.py --input-shapes "3,128,128"              # 单输入
+    python demo/run_conversion.py --input-shapes "1,224,224 1,224,224"    # 多输入
+
+输出文件 (<output-dir>/):
     model_tf.py        — 转换后的 TensorFlow 模型代码
     weights.weights.h5 — 转换后的 TensorFlow 权重
     frozen_model.pb    — 冻结图 (昇腾部署用)
     saved_model/       — TF SavedModel 格式
-    验证报告            — 精度校验结果
 """
 
 import argparse
@@ -35,8 +37,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 DEMO_DIR = PROJECT_ROOT / "demo"
-PT_MODEL_DIR = DEMO_DIR / "pytorch_model"
-OUTPUT_DIR = DEMO_DIR / "output"
+DEFAULT_PT_MODEL = DEMO_DIR / "pytorch_model" / "model.py"
+DEFAULT_OUTPUT_DIR = DEMO_DIR / "output"
 
 
 # ──────────────────────────────────────────
@@ -103,7 +105,7 @@ def _parse_input_shapes(raw: str) -> list[tuple[int, ...]]:
     return shapes
 
 
-def _build_dummy_inputs(input_shapes, batch_size, channels_first):
+def _build_dummy_inputs(input_shapes, batch_size):
     """根据 input_shapes 构建 numpy dummy 输入列表 (NCHW 格式)."""
     inputs = []
     for shape in input_shapes:
@@ -129,15 +131,32 @@ def _nhwc_to_nchw(arr):
     return arr
 
 
+def _to_numpy(tensor):
+    """将 PyTorch/TF tensor 或 tuple/list 转为 numpy, 多输出时取第一个."""
+    if isinstance(tensor, (tuple, list)):
+        tensor = tensor[0]
+    if hasattr(tensor, "numpy"):
+        return tensor.numpy()
+    return np.asarray(tensor)
+
+
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Model → TensorFlow 全流程转换")
+    parser.add_argument(
+        "--pt-model", default=None,
+        help="PyTorch 模型文件路径 (默认: demo/pytorch_model/model.py)",
+    )
     parser.add_argument(
         "--channels-first", action="store_true",
         help="保持 NCHW 数据格式 (匹配 PyTorch), TF 层使用 data_format='channels_first'",
     )
     parser.add_argument(
         "--pt-weights", default=None,
-        help="PyTorch 权重文件路径 (默认: demo/pytorch_model/unet_weights.pth, 不存在则自动初始化)",
+        help="PyTorch 权重文件路径 (默认: 与模型同目录, 不存在则自动初始化)",
+    )
+    parser.add_argument(
+        "--output-dir", default=None,
+        help="输出目录 (默认: demo/output/)",
     )
     parser.add_argument(
         "--soc-version", default="Ascend910B4",
@@ -148,8 +167,12 @@ def main():
         help="入口模型类名 (如 UNet)。未指定时自动检测源文件中最后一个 nn.Module 子类",
     )
     parser.add_argument(
-        "--model-args", default="in_channels=3, num_classes=2, base_features=32",
-        help="模型构造参数 (Python kwargs 格式, 默认: 'in_channels=3, num_classes=2, base_features=32')",
+        "--model-args", default=None,
+        help=(
+            "模型构造参数 (Python kwargs 格式)。"
+            "示例: 'in_channels=3, num_classes=2, base_features=32'。"
+            "未指定时尝试使用模型默认参数"
+        ),
     )
     parser.add_argument(
         "--input-shapes", default=None,
@@ -159,10 +182,24 @@ def main():
             "未指定时根据 forward 签名参数数量自动推断"
         ),
     )
+    parser.add_argument(
+        "--cosine-threshold", type=float, default=0.99,
+        help="精度校验的最低余弦相似度阈值 (默认: 0.99)",
+    )
     args = parser.parse_args()
 
     channels_first = args.channels_first
     mode_label = "NCHW (channels_first)" if channels_first else "NHWC (channels_last)"
+
+    # ──────────────────────────────────────────
+    # 解析模型路径
+    # ──────────────────────────────────────────
+    pt_model_path = Path(args.pt_model) if args.pt_model else DEFAULT_PT_MODEL
+    if not pt_model_path.exists():
+        print(f"[ERROR] 找不到 PyTorch 模型文件: {pt_model_path}")
+        return 1
+
+    output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_DIR
 
     # ──────────────────────────────────────────
     # 解析模型构造参数
@@ -178,11 +215,6 @@ def main():
     # ──────────────────────────────────────────
     # 检测入口模型类
     # ──────────────────────────────────────────
-    pt_model_path = PT_MODEL_DIR / "model.py"
-    if not pt_model_path.exists():
-        print(f"[ERROR] 找不到 PyTorch 模型文件: {pt_model_path}")
-        return 1
-
     pt_source = pt_model_path.read_text(encoding="utf-8")
 
     if args.model_class:
@@ -211,27 +243,35 @@ def main():
     batch_size = 1
     num_tests = 5
     random_seed = 42
-    cosine_threshold = 0.99
+    cosine_threshold = args.cosine_threshold
 
     print("=" * 70)
     print("  PyTorch Model → TensorFlow 全流程转换")
+    print(f"  模型文件: {pt_model_path}")
     print(f"  数据格式: {mode_label}")
-    print(f"  模型参数: {', '.join(f'{k}={v}' for k, v in model_kwargs.items())}")
+    if model_kwargs:
+        print(f"  模型参数: {', '.join(f'{k}={v}' for k, v in model_kwargs.items())}")
     if len(input_shapes) == 1:
         print(f"  输入形状: {input_shapes[0]} (CHW)")
     else:
         for idx, s in enumerate(input_shapes):
             print(f"  输入 {idx}: {s} (CHW)")
+    print(f"  余弦阈值: {cosine_threshold}")
     print("=" * 70)
 
     # ──────────────────────────────────────────
     # 权重文件检查 & 自动初始化
     # ──────────────────────────────────────────
-    pt_weights_path = Path(args.pt_weights) if args.pt_weights else PT_MODEL_DIR / "unet_weights.pth"
+    if args.pt_weights:
+        pt_weights_path = Path(args.pt_weights)
+    else:
+        # 默认: 与模型文件同目录下的 <model_stem>_weights.pth
+        pt_weights_path = pt_model_path.parent / f"{pt_model_path.stem}_weights.pth"
+
     if not pt_weights_path.exists():
         print(f"  权重文件不存在，初始化模型参数并保存...")
         import torch
-        sys.path.insert(0, str(PT_MODEL_DIR))
+        sys.path.insert(0, str(pt_model_path.parent))
         _, ModelCls = _load_class_from_file(pt_model_path, entry_class, "pt_init_model")
         torch.manual_seed(random_seed)
         _init_model = ModelCls(**model_kwargs)
@@ -243,7 +283,7 @@ def main():
         print(f"  权重已初始化并保存: {pt_weights_path}")
         del _init_model
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # ──────────────────────────────────────────
     # Step 1: 转换模型代码
@@ -253,7 +293,7 @@ def main():
     from pytorch2tensorflow.converter import ModelConverter
 
     converter = ModelConverter(channels_first=channels_first)
-    tf_model_path = OUTPUT_DIR / "model_tf.py"
+    tf_model_path = output_dir / "model_tf.py"
     converted_code = converter.convert_file(str(pt_model_path), str(tf_model_path))
     line_count = converted_code.count("\n")
     print(f"  输出文件: {tf_model_path}")
@@ -266,8 +306,8 @@ def main():
     for line in converted_code.split("\n"):
         s = line.strip()
         if any(k in s for k in [
-            f"class {entry_class}", "class DoubleConv", "class Down", "class Up",
-            "tf.pad(", "tf.concat(", "def call", "data_format",
+            "class ", "def call", "tf.pad(", "tf.concat(",
+            "data_format", "BilinearUpsample2D",
         ]):
             print(f"  | {line.rstrip()}")
 
@@ -278,7 +318,7 @@ def main():
     print("[Step 2/5] 加载 PyTorch 模型 & 权重 ...")
     import torch
 
-    sys.path.insert(0, str(PT_MODEL_DIR))
+    sys.path.insert(0, str(pt_model_path.parent))
     _, PyTorchModelCls = _load_class_from_file(pt_model_path, entry_class, "pt_model")
 
     pt_model = PyTorchModelCls(**model_kwargs)
@@ -332,14 +372,14 @@ def main():
     else:
         tf_model(*dummy_inputs_tf, training=False)
 
-    tf_param_count = sum(np.prod(v.shape) for v in tf_model.weights)
-    print(f"  TF 参数量: {int(tf_param_count):,}")
+    tf_param_count = sum(int(np.prod(v.shape)) for v in tf_model.weights)
+    print(f"  TF 参数量: {tf_param_count:,}")
 
     # 权重转换
     from pytorch2tensorflow.weight_converter import WeightConverter
     weight_converter = WeightConverter(strict=False)
 
-    tf_weights_path = str(OUTPUT_DIR / "weights.weights.h5")
+    tf_weights_path = str(output_dir / "weights.weights.h5")
     stats = weight_converter.convert(
         str(pt_weights_path), tf_model,
         output_path=tf_weights_path,
@@ -384,15 +424,15 @@ def main():
 
     for i in range(num_tests):
         # 生成随机输入 (NCHW)
-        inputs_nchw = _build_dummy_inputs(input_shapes, batch_size, channels_first)
+        inputs_nchw = _build_dummy_inputs(input_shapes, batch_size)
 
         # PyTorch 前向推理 (NCHW)
         with torch.no_grad():
             pt_tensors = [torch.from_numpy(x) for x in inputs_nchw]
             if len(pt_tensors) == 1:
-                pt_out = pt_model(pt_tensors[0]).numpy()
+                pt_out = _to_numpy(pt_model(pt_tensors[0]))
             else:
-                pt_out = pt_model(*pt_tensors).numpy()
+                pt_out = _to_numpy(pt_model(*pt_tensors))
 
         # TF 前向推理
         if channels_first:
@@ -401,9 +441,9 @@ def main():
             tf_inputs = [tf.constant(_nchw_to_nhwc(x)) for x in inputs_nchw]
 
         if len(tf_inputs) == 1:
-            tf_out = tf_model(tf_inputs[0], training=False).numpy()
+            tf_out = _to_numpy(tf_model(tf_inputs[0], training=False))
         else:
-            tf_out = tf_model(*tf_inputs, training=False).numpy()
+            tf_out = _to_numpy(tf_model(*tf_inputs, training=False))
 
         tf_out_nchw = tf_out if channels_first else _nhwc_to_nchw(tf_out)
 
@@ -441,7 +481,7 @@ def main():
 
     export_results = exporter.export_and_verify(
         tf_model,
-        str(OUTPUT_DIR),
+        str(output_dir),
         input_shapes,
         soc_version=args.soc_version,
         batch_size=batch_size,
@@ -466,10 +506,11 @@ def main():
     # ──────────────────────────────────────────
     # 输出汇总
     # ──────────────────────────────────────────
+    rel_output = output_dir.relative_to(PROJECT_ROOT) if output_dir.is_relative_to(PROJECT_ROOT) else output_dir
     print(f"\n{'=' * 70}")
     print("  转换完成! 输出文件汇总:")
     print(f"{'=' * 70}")
-    print(f"  demo/output/")
+    print(f"  {rel_output}/")
     print(f"  ├── model_tf.py          TensorFlow 模型代码")
     print(f"  ├── weights.weights.h5   TensorFlow 权重")
     print(f"  ├── frozen_model.pb      冻结图 (PB 格式)")
