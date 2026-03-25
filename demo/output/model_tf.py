@@ -43,9 +43,9 @@ def _pt_padding_to_tf(padding, ndim=4, channels_first=False):
     return tf.constant(full, dtype=tf.int32)
 
 
-# NOTE: This model uses data_format='channels_first' (NCHW),
-# matching the original PyTorch dimension ordering.
-# Input tensors should be in NCHW format (batch, channels, height, width).
+# NOTE: This model was converted from PyTorch (NCHW) to TensorFlow (NHWC).
+# Input tensors should be in NHWC format (batch, height, width, channels).
+# Use nchw_to_nhwc() / nhwc_to_nchw() helpers if needed.
 
 
 class DoubleConv(tf.keras.Model):
@@ -53,10 +53,10 @@ class DoubleConv(tf.keras.Model):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv1 = tf.keras.layers.Conv2D(out_channels, kernel_size=3, padding='same', use_bias=False, data_format='channels_first')
-        self.bn1 = tf.keras.layers.BatchNormalization(axis=1)
-        self.conv2 = tf.keras.layers.Conv2D(out_channels, kernel_size=3, padding='same', use_bias=False, data_format='channels_first')
-        self.bn2 = tf.keras.layers.BatchNormalization(axis=1)
+        self.conv1 = tf.keras.layers.Conv2D(out_channels, kernel_size=3, padding='same', use_bias=False)
+        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.conv2 = tf.keras.layers.Conv2D(out_channels, kernel_size=3, padding='same', use_bias=False)
+        self.bn2 = tf.keras.layers.BatchNormalization()
 
     def call(self, x, training=False):
         x = tf.nn.relu(self.bn1(self.conv1(x)))
@@ -69,7 +69,7 @@ class Down(tf.keras.Model):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.pool = tf.keras.layers.MaxPool2D(2, data_format='channels_first')
+        self.pool = tf.keras.layers.MaxPool2D(pool_size=2)
         self.conv = DoubleConv(in_channels, out_channels)
 
     def call(self, x, training=False):
@@ -83,19 +83,19 @@ class Up(tf.keras.Model):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.up = tf.keras.layers.Conv2DTranspose(in_channels // 2, kernel_size=2, strides=2, data_format='channels_first')
+        self.up = tf.keras.layers.Conv2DTranspose(in_channels // 2, kernel_size=2, strides=2)
         self.conv = DoubleConv(in_channels, out_channels)
 
     def call(self, x1, x2, training=False):
         x1 = self.up(x1)
 
         # Pad x1 to match x2 spatial dimensions if needed
-        diff_y = x2.shape[2] - x1.shape[2]
-        diff_x = x2.shape[3] - x1.shape[3]
+        diff_y = x2.shape[1] - x1.shape[1]
+        diff_x = x2.shape[2] - x1.shape[2]
         x1 = tf.pad(x1, _pt_padding_to_tf((diff_x // 2, diff_x - diff_x // 2,
-                         diff_y // 2, diff_y - diff_y // 2), len(x1.shape), channels_first=True))
+                         diff_y // 2, diff_y - diff_y // 2), len(x1.shape), channels_first=False))
 
-        x = tf.concat([x2, x1], axis=1)
+        x = tf.concat([x2, x1], axis=-1)
         x = self.conv(x)
         return x
 
@@ -126,7 +126,7 @@ class UNet(tf.keras.Model):
         self.up4 = Up(base_features * 2, base_features)
 
         # Output
-        self.outc = tf.keras.layers.Conv2D(num_classes, kernel_size=1, data_format='channels_first')
+        self.outc = tf.keras.layers.Conv2D(num_classes, kernel_size=1)
 
     def call(self, x, training=False):
         # Encoder path
@@ -154,3 +154,18 @@ if __name__ == "__main__":
     print(f"Input shape:  {x.shape}")
     print(f"Output shape: {y.shape}")
     print(f"Parameters:   {sum(tf.size(p) for p in model.trainable_variables):,}")
+
+
+def nchw_to_nhwc(x):
+    """Convert tensor from PyTorch format (NCHW) to TensorFlow format (NHWC)."""
+    if len(x.shape) == 4:
+        return tf.transpose(x, perm=[0, 2, 3, 1])
+    return x
+
+
+def nhwc_to_nchw(x):
+    """Convert tensor from TensorFlow format (NHWC) to PyTorch format (NCHW)."""
+    if len(x.shape) == 4:
+        return tf.transpose(x, perm=[0, 3, 1, 2])
+    return x
+

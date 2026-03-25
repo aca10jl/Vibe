@@ -51,9 +51,10 @@ class ModelConverter:
         self.add_channel_convert = add_channel_convert and not channels_first
         self._custom_layers_needed: set[str] = set()
         # Track conv layers that need explicit padding (stride>1 + padding>0)
-        # Each entry is (attr_pattern, pad_value, ndim) where attr_pattern
-        # matches the attribute call (e.g. "self.conv") in the call() method
-        self._explicit_padding_convs: list[tuple[str, int, int]] = []
+        # Each entry is (class_name, attr_pattern, pad_value, ndim) where
+        # class_name scopes the injection, and attr_pattern matches the
+        # attribute call (e.g. "self.conv") in the call() method
+        self._explicit_padding_convs: list[tuple[str | None, str, int, int]] = []
         # Flags for runtime helper function injection
         self._needs_pad_helper = False
         self._needs_interpolate_helper = False
@@ -322,6 +323,8 @@ class ModelConverter:
             source = self._convert_linear_params(source)
         if "AdaptiveAvgPool" in pt_layer or "AdaptiveMaxPool" in pt_layer:
             source = self._convert_adaptive_pool_params(source, tf_layer)
+        if re.match(r"nn\.(Max|Avg)Pool\dd", pt_layer) and "Adaptive" not in pt_layer:
+            source = self._convert_pool_params(source, tf_layer)
         if "LayerNorm" in pt_layer:
             source = self._convert_layernorm_params(source)
         if "GroupNorm" in pt_layer:
@@ -638,6 +641,15 @@ class ModelConverter:
             r"(self\.(\w+)\s*=\s*" + re.escape(tf_layer) + r"\([^)]*)"
         )
 
+        def _find_enclosing_class(pos: int) -> str | None:
+            """Find the class name enclosing a given position in source."""
+            # Search backwards for the most recent 'class Xxx' definition
+            class_pattern = re.compile(r"^class\s+(\w+)\s*[\(:]", re.MULTILINE)
+            best = None
+            for m in class_pattern.finditer(source[:pos]):
+                best = m.group(1)
+            return best
+
         def _check_and_fix(match: re.Match) -> str:
             call_str = match.group(0)
             attr_name = match.group(2)
@@ -672,9 +684,12 @@ class ModelConverter:
             kernel_size = int(kernel_m.group(1))
             pad_val = kernel_size // 2  # PyTorch padding=1 typically = kernel//2
 
-            # Record for explicit padding injection
+            # Find enclosing class to scope the padding injection
+            class_name = _find_enclosing_class(match.start())
+
+            # Record for explicit padding injection (with class scope)
             self._explicit_padding_convs.append(
-                (f"self.{attr_name}", pad_val, ndim)
+                (class_name, f"self.{attr_name}", pad_val, ndim)
             )
 
             # Change padding='same' to padding='valid'
@@ -920,6 +935,124 @@ class ModelConverter:
 
         return source
 
+    def _convert_pool_params(self, source: str, tf_layer: str) -> str:
+        """Convert MaxPool/AvgPool parameters from PyTorch to TF convention.
+
+        PyTorch: nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        TF:      tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding='same')
+
+        Parameter mapping:
+            kernel_size  → pool_size
+            stride       → strides
+            padding (int)→ 'same'/'valid'
+            ceil_mode, return_indices, count_include_pad → removed
+        """
+        pool_call_full = re.escape(tf_layer) + r"\("
+
+        result = []
+        last_end = 0
+        for match in re.finditer(pool_call_full, source):
+            start = match.start()
+            depth = 1
+            i = match.end()
+            while i < len(source) and depth > 0:
+                if source[i] == "(":
+                    depth += 1
+                elif source[i] == ")":
+                    depth -= 1
+                i += 1
+            args_str = source[match.end():i - 1]
+            parts = self._split_args_paren_aware(args_str)
+
+            renamed = []
+            padding_val = None
+            stride_val = None
+            pool_size_val = None
+            for p in parts:
+                s = p.strip()
+                # kernel_size → pool_size
+                m = re.match(r"kernel_size\s*=\s*(.+)$", s)
+                if m:
+                    pool_size_val = m.group(1).strip()
+                    renamed.append(f"pool_size={pool_size_val}")
+                    continue
+                # stride → strides
+                m = re.match(r"stride\s*=\s*(.+)$", s)
+                if m:
+                    stride_val = m.group(1).strip()
+                    renamed.append(f"strides={stride_val}")
+                    continue
+                # padding
+                m = re.match(r"padding\s*=\s*(.+)$", s)
+                if m:
+                    val = m.group(1).strip()
+                    padding_val = val
+                    if val == "0":
+                        renamed.append("padding='valid'")
+                    elif re.match(r"^\d+$", val):
+                        renamed.append("padding='same'")
+                    elif re.match(r"^\(\s*0\s*(,\s*0\s*)*\)$", val):
+                        renamed.append("padding='valid'")
+                    elif re.match(r"^\([\d\s,]+\)$", val):
+                        renamed.append("padding='same'")
+                    elif val in ("'same'", '"same"', "'valid'", '"valid"'):
+                        renamed.append(p)
+                    else:
+                        renamed.append("padding='same'")
+                    continue
+                # Remove unsupported params
+                if re.match(r"(ceil_mode|return_indices|count_include_pad)\s*=", s):
+                    continue
+                # First positional arg (no '=') is kernel_size
+                if not self._is_keyword_arg(s) and pool_size_val is None:
+                    pool_size_val = s
+                    renamed.append(f"pool_size={s}")
+                    continue
+                renamed.append(p)
+            parts = renamed
+
+            # Handle stride + padding asymmetry (same as Conv fix)
+            # If stride > 1 and padding > 0, TF 'same' differs from PyTorch
+            # Use explicit tf.pad approach
+            if padding_val and re.match(r"^\d+$", padding_val) and int(padding_val) > 0:
+                if stride_val and re.match(r"^\d+$", stride_val) and int(stride_val) > 1:
+                    # Find the attribute name for this pool layer
+                    # Look backwards from start for self.xxx = pattern
+                    attr_match = re.search(
+                        r"self\.(\w+)\s*=\s*$",
+                        source[:start],
+                    )
+                    if attr_match:
+                        attr_name = attr_match.group(1)
+                        pad_val = int(padding_val)
+                        # Determine dimensionality
+                        if "1D" in tf_layer or "1d" in tf_layer:
+                            ndim = 1
+                        elif "3D" in tf_layer or "3d" in tf_layer:
+                            ndim = 3
+                        else:
+                            ndim = 2
+                        # Find enclosing class
+                        class_pattern = re.compile(r"^class\s+(\w+)\s*[\(:]", re.MULTILINE)
+                        class_name = None
+                        for cm in class_pattern.finditer(source[:start]):
+                            class_name = cm.group(1)
+                        self._explicit_padding_convs.append(
+                            (class_name, f"self.{attr_name}", pad_val, ndim)
+                        )
+                        # Change padding to 'valid'
+                        parts = [
+                            "padding='valid'" if p.strip().startswith("padding=") else p
+                            for p in parts
+                        ]
+
+            result.append(source[last_end:start])
+            result.append(f"{tf_layer}({', '.join(parts)})")
+            last_end = i
+
+        result.append(source[last_end:])
+        return "".join(result)
+
     def _convert_adaptive_pool_params(self, source: str, tf_layer: str) -> str:
         """Convert AdaptiveAvgPool/AdaptiveMaxPool → GlobalAveragePooling/GlobalMaxPool.
 
@@ -979,13 +1112,23 @@ class ModelConverter:
         When stride>1 with padding>0, TF's padding='same' differs from
         PyTorch's symmetric padding. We convert to padding='valid' and
         add explicit tf.pad() calls in the call() method.
+
+        Padding injection is scoped to the class where the conv/pool was
+        defined, so self.conv1 in ClassA won't get padding meant for ClassB.
         """
         if not self._explicit_padding_convs:
             return source
 
-        for attr_pattern, pad_val, ndim in self._explicit_padding_convs:
-            # Find "self.conv(expr)" in the call method and prepend tf.pad()
-            # We need to match the conv call and insert padding before it.
+        # Build a map of class boundaries: {class_name: (start, end)}
+        class_pattern = re.compile(r"^class\s+(\w+)\s*[\(:]", re.MULTILINE)
+        class_ranges = []  # [(class_name, start, end)]
+        matches = list(class_pattern.finditer(source))
+        for idx, m in enumerate(matches):
+            start = m.start()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(source)
+            class_ranges.append((m.group(1), start, end))
+
+        for target_class, attr_pattern, pad_val, ndim in self._explicit_padding_convs:
             escaped = re.escape(attr_pattern)
 
             if ndim == 1:
@@ -1002,27 +1145,36 @@ class ModelConverter:
                     f"[{pad_val}, {pad_val}], [0, 0]]"
                 )
 
-            # Match: ... = self.conv(expr) or return self.conv(expr) or self.conv(self.other(x))
-            # We insert tf.pad before the call
-            def _add_pad(m: re.Match, _pad=pad_str) -> str:
-                full = m.group(0)
-                indent = m.group(1)
-                arg = m.group(2)
-                # Replace self.conv(arg) with self.conv(tf.pad(arg, paddings))
-                return full.replace(
-                    f"{attr_pattern}({arg})",
-                    f"{attr_pattern}(tf.pad({arg}, {_pad}))",
-                )
+            # Find the class range for target_class
+            if target_class:
+                target_ranges = [
+                    (s, e) for cn, s, e in class_ranges if cn == target_class
+                ]
+            else:
+                # No class context — apply globally (fallback)
+                target_ranges = [(0, len(source))]
 
-            # Match self.attr(single_word_arg) — handles simple cases
-            source = re.sub(
-                r"([ \t]*)([^\n]*)" + escaped + r"\((\w+)\)",
-                lambda m, _a=attr_pattern, _p=pad_str: m.group(0).replace(
-                    f"{_a}({m.group(3)})",
-                    f"{_a}(tf.pad({m.group(3)}, {_p}))",
-                ),
-                source,
+            # Apply padding only within the target class scope
+            pat = re.compile(
+                r"([ \t]*)([^\n]*)" + escaped + r"\((\w+)\)"
             )
+            for range_start, range_end in target_ranges:
+                segment = source[range_start:range_end]
+                new_segment = pat.sub(
+                    lambda m, _a=attr_pattern, _p=pad_str: m.group(0).replace(
+                        f"{_a}({m.group(3)})",
+                        f"{_a}(tf.pad({m.group(3)}, {_p}))",
+                    ),
+                    segment,
+                )
+                source = source[:range_start] + new_segment + source[range_end:]
+                # Adjust ranges if length changed
+                diff = len(new_segment) - len(segment)
+                class_ranges = [
+                    (cn, s if s <= range_start else s + diff,
+                     e if e <= range_start else e + diff)
+                    for cn, s, e in class_ranges
+                ]
 
         self._explicit_padding_convs.clear()
         return source
