@@ -1036,7 +1036,10 @@ class ModelConverter:
         # Handle torch.flatten specially before generic replacement
         source = self._convert_torch_flatten(source)
 
-        for pt_func, tf_func in {**FUNCTIONAL_MAP, **ACTIVATION_MAP}.items():
+        # Sort by key length descending so longer matches (e.g. torch.log_softmax)
+        # are processed before shorter substrings (e.g. torch.log)
+        all_ops = {**FUNCTIONAL_MAP, **ACTIVATION_MAP}
+        for pt_func, tf_func in sorted(all_ops.items(), key=lambda x: len(x[0]), reverse=True):
             if pt_func in source:
                 source = self._convert_specific_functional(source, pt_func, tf_func)
         return source
@@ -1597,6 +1600,12 @@ class ModelConverter:
             source,
         )
 
+        # .softmax(dim) / .log_softmax(dim) → tf.nn.softmax / tf.nn.log_softmax
+        source = self._convert_method_to_func(
+            source, "softmax", "tf.nn.softmax", args_transform=_rename_dim_keepdim)
+        source = self._convert_method_to_func(
+            source, "log_softmax", "tf.nn.log_softmax", args_transform=_rename_dim_keepdim)
+
         # .mean(dim) / .sum(dim) / .max(dim) / .min(dim)
         source = self._convert_method_to_func(
             source, "mean", "tf.reduce_mean", args_transform=_rename_dim_keepdim)
@@ -1775,7 +1784,9 @@ class ModelConverter:
 
     def _convert_torch_ops(self, source: str) -> str:
         """Convert remaining torch.xxx operations."""
-        for pt_op, tf_op in FUNCTIONAL_MAP.items():
+        # Sort by key length descending to avoid substring collisions
+        # (e.g. torch.log replacing the prefix of torch.log_softmax)
+        for pt_op, tf_op in sorted(FUNCTIONAL_MAP.items(), key=lambda x: len(x[0]), reverse=True):
             if tf_op and pt_op in source:
                 source = source.replace(pt_op, tf_op)
 
