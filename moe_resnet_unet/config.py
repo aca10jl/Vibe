@@ -18,12 +18,12 @@ MODEL_CONFIG = {
     'num_classes': 3,                   # 0=跳过, 1=轻量UNet, 2=重量UNet
 
     # --- 轻量 UNet 专家（expert1）---
-    'unet_light_channels': [16, 32, 64, 128],
-    'unet_light_bottleneck': 256,
+    'unet_light_channels': [8, 16, 32, 64],
+    'unet_light_bottleneck': 128,
 
     # --- 重量 UNet 专家（expert2）---
-    'unet_heavy_channels': [64, 128, 256, 512],
-    'unet_heavy_bottleneck': 1024,
+    'unet_heavy_channels': [16, 32, 64, 128],
+    'unet_heavy_bottleneck': 256,
 
     # --- UNet 输出通道（分割掩码）---
     'unet_output_channels': 1,
