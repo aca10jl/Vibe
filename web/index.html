@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>一键一生 · Wafer 良率根因分析 + AI 伴读助手</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◧</span>
+      <div>
+        <h1>一键一生 <small>Wafer Lifecycle Root-Cause</small></h1>
+        <p>晶圆全生命周期全链路分析平台 · Demo</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="env-pill">合成数据 / Synthetic</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- 左：场景设定 -->
+    <aside class="sidebar-left">
+      <section class="card">
+        <h3>① 场景设定</h3>
+        <label>Wafer ID / Lot <span class="req">*</span></label>
+        <input id="cfgWaferId" type="text" placeholder="如 W-2026-0512-07" autocomplete="off" />
+        <div class="grid2">
+          <div><label>Fab</label><select id="cfgFab"></select></div>
+          <div><label>工艺节点</label><select id="cfgNode"></select></div>
+        </div>
+        <div class="grid2">
+          <div><label>产品</label><select id="cfgProduct"></select></div>
+          <div><label>时间范围</label>
+            <select id="cfgTimeRange"><option value="30d">近30天</option><option value="7d">近7天</option><option value="90d">近90天</option></select>
+          </div>
+        </div>
+        <label>预期缺陷特征（可留空自动识别）</label>
+        <select id="cfgSignature">
+          <option value="">自动识别</option>
+          <option value="edge_ring">边缘环状 Edge Ring</option>
+          <option value="center">中心聚集 Center</option>
+          <option value="scratch">划伤 Scratch</option>
+          <option value="cluster">局部簇 Cluster</option>
+          <option value="random">随机 Random</option>
+        </select>
+      </section>
+
+      <section class="card">
+        <h3>② 分析维度</h3>
+        <div class="checks">
+          <label><input type="checkbox" name="analysisDim" value="equipment" checked /> 设备/腔体关联</label>
+          <label><input type="checkbox" name="analysisDim" value="process" checked /> 工艺步骤</label>
+          <label><input type="checkbox" name="analysisDim" value="param" /> 参数漂移 (WAT)</label>
+          <label><input type="checkbox" name="analysisDim" value="defect" checked /> 缺陷特征</label>
+          <label><input type="checkbox" name="analysisDim" value="genealogy" /> 批次谱系</label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>③ 呈现内容</h3>
+        <div class="checks">
+          <label><input type="checkbox" name="presentation" value="waferMap" checked /> 晶圆 Bin 图</label>
+          <label><input type="checkbox" name="presentation" value="yield" checked /> 良率趋势</label>
+          <label><input type="checkbox" name="presentation" value="wat" checked /> WAT 参数趋势</label>
+          <label><input type="checkbox" name="presentation" value="defect" checked /> 缺陷 Pareto</label>
+          <label><input type="checkbox" name="presentation" value="flow" checked /> 工艺流程时间轴</label>
+        </div>
+      </section>
+
+      <section class="card readiness">
+        <div class="ready-track"><div id="readyBar" class="ready-bar warn" style="width:0"></div></div>
+        <div id="readyText" class="ready-text">0% · 待补全</div>
+        <ul id="cfgIssues" class="issues"></ul>
+        <div class="btn-row">
+          <button id="btnRun" class="btn-primary">🚀 提交「一键一生」</button>
+          <button id="btnDemo" class="btn-ghost">一键示例</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- 中：结果呈现 -->
+    <main class="content">
+      <div id="emptyState" class="empty">
+        <div class="empty-ico">◧</div>
+        <h2>配置左侧场景，点击「一键一生」</h2>
+        <p>系统将一键还原该晶圆的全链路历史：晶圆图、良率/参数趋势、缺陷分布、工艺流程与根因候选。<br/>右侧 AI 助手会全程伴读、分析并给出建议。</p>
+        <button class="btn-primary" onclick="document.getElementById('btnDemo').click()">▶ 运行一个示例</button>
+      </div>
+
+      <div id="resultWrap" style="display:none">
+        <!-- KPI -->
+        <section class="result-head">
+          <div class="rs-title">
+            <h2 id="rsWafer">—</h2><span id="rsMeta" class="rs-meta">—</span>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><span class="kpi-val" id="rsYield">—</span><span class="kpi-lbl">终测良率</span></div>
+            <div class="kpi"><span class="kpi-val" id="rsDie">—</span><span class="kpi-lbl">有效 Die</span></div>
+            <div class="kpi"><span class="kpi-val small" id="rsSig">—</span><span class="kpi-lbl">缺陷特征</span></div>
+            <div class="kpi"><span class="kpi-val small" id="rsTool">—</span><span class="kpi-lbl">嫌疑设备</span></div>
+          </div>
+        </section>
+
+        <!-- 根因候选 -->
+        <section id="panel-rootCause" class="panel">
+          <h3>🎯 根因候选 (Commonality)</h3>
+          <div id="rootCauseList" class="rc-list"></div>
+        </section>
+
+        <div class="panel-grid">
+          <section id="panel-waferMap" class="panel">
+            <h3>🟩 晶圆 Bin 图</h3>
+            <div id="waferMap" class="chart"></div>
+            <div class="legend"><span class="dot g"></span>良品 <span class="dot f1"></span>Fail-1 <span class="dot f2"></span>Fail-2 <span class="dot f3"></span>Fail-3</div>
+          </section>
+          <section id="panel-yieldTrend" class="panel">
+            <h3>📉 良率趋势（批次）</h3>
+            <div id="yieldTrend" class="chart"></div>
+          </section>
+          <section id="panel-watTrend" class="panel">
+            <h3>📊 WAT 参数趋势</h3>
+            <div id="watTrend" class="chart"></div>
+          </section>
+          <section id="panel-defectPareto" class="panel">
+            <h3>🧱 缺陷 Pareto</h3>
+            <div id="defectPareto" class="chart"></div>
+          </section>
+        </div>
+
+        <section id="panel-processFlow" class="panel">
+          <h3>🧬 工艺流程时间轴（前道→中测→后道）</h3>
+          <div id="processFlow" class="flow"></div>
+        </section>
+      </div>
+    </main>
+
+    <!-- 右：AI 助手 -->
+    <aside class="sidebar-ai">
+      <div class="ai-head">
+        <div class="ai-title">
+          <span class="ai-logo">🤖</span>
+          <div><strong>AI 伴读助手</strong><span id="aiModeBadge" class="ai-mode-badge local">本地推理</span></div>
+        </div>
+        <label class="switch" title="切换到真实 Claude（需后端）">
+          <input type="checkbox" id="aiModeToggle" /><span class="slider"></span><em>Claude</em>
+        </label>
+      </div>
+
+      <div class="ai-tabs">
+        <button id="aiTabCompanion" class="ai-tab">👁 伴读</button>
+        <button id="aiTabAnalyze" class="ai-tab">🔍 分析</button>
+        <button id="aiTabAdvise" class="ai-tab">💡 建议</button>
+        <button id="aiHabitBtn" class="ai-tab" title="习惯画像">🧠</button>
+      </div>
+
+      <div id="aiHabitPanel" class="habit-panel">
+        <div class="habit-head">智能体习惯画像 <button id="aiResetHabit" class="mini">清空</button></div>
+        <div class="habit-body"></div>
+        <small class="habit-note">助手会持续学习你的 Fab/节点/维度偏好，用于个性化默认值与建议。</small>
+      </div>
+
+      <div id="aiMessages" class="ai-messages"></div>
+      <div id="aiFollowups" class="ai-followups"></div>
+      <div class="ai-input">
+        <textarea id="aiInput" rows="2" placeholder="问我：这个良率正常吗 / 帮我分析根因 / 我该怎么填表…"></textarea>
+        <button id="aiSend">↑</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 数据与逻辑 -->
+  <script src="js/data/mockData.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/agent/habitProfile.js"></script>
+  <script src="js/agent/contextCollector.js"></script>
+  <script src="js/agent/tools.js"></script>
+  <script src="js/agent/llmClient.js"></script>
+  <script src="js/agent/assistant.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    // 后端地址（如分离部署可改）；默认同源
+    window.AI_BACKEND = '';
+    document.addEventListener('DOMContentLoaded', function () {
+      WaferApp.initForm();
+      AgentTools.bind(WaferApp);
+      Assistant.init(WaferApp.getState);
+    });
+  </script>
+</body>
+</html>
