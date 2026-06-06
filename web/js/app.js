@@ -52,7 +52,7 @@
   // ---------- 执行一键一生 ----------
   function runLifecycle() {
     const ctx = ContextCollector.collect(state);
-    if (!ctx.validation.ready) { updateReadiness(); flash('btnRun'); return { ok: false, error: '场景未就绪' }; }
+    if (!ctx.validation.ready) { updateReadiness(); if (global.Wizard) { Wizard.enterConfigMode(); Wizard.goTo(4); } flash('btnRun'); return { ok: false, error: '场景未就绪' }; }
     const s = ctx.scenario;
     state.data = WaferData.generateLifecycle({
       waferId: s.waferId, fab: s.fab || undefined, node: s.node || undefined,
@@ -62,6 +62,7 @@
     HabitProfile.track('submit_task', { waferId: s.waferId, signature: state.data.summary.signature });
     renderResult();
     document.body.classList.add('has-result');
+    if (global.Wizard) Wizard.enterResultMode();
     // 让 AI 自动伴读
     setTimeout(() => global.Assistant && Assistant.autoCompanionAfterRun(), 350);
     return { ok: true, waferId: s.waferId, finalYield: state.data.summary.finalYield };

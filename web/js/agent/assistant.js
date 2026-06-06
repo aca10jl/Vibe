@@ -5,8 +5,12 @@
 (function (global) {
   'use strict';
 
+  const LS_MODE = 'wafer_ai_mode';
+  const LS_LOCAL = 'wafer_ai_local_cfg';
+
   const state = {
-    mode: 'mock',        // mock | claude
+    mode: 'mock',        // mock | local | claude
+    localConfig: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:7b-instruct', apiKey: '' },
     history: [],         // [{role, content}]
     busy: false,
     getAppState: null,   // () => app state，用于 contextCollector
@@ -14,13 +18,53 @@
 
   const $ = id => document.getElementById(id);
 
+  const MODE_META = {
+    mock: { label: '本地推理', cls: 'local' },
+    local: { label: '本地大模型', cls: 'locallm' },
+    claude: { label: 'Claude 在线', cls: 'online' },
+  };
+
   function setMode(mode) {
     state.mode = mode;
+    const m = MODE_META[mode] || MODE_META.mock;
     const badge = $('aiModeBadge');
-    if (badge) {
-      badge.textContent = mode === 'claude' ? 'Claude 在线' : '本地推理';
-      badge.className = 'ai-mode-badge ' + (mode === 'claude' ? 'online' : 'local');
+    if (badge) { badge.textContent = m.label; badge.className = 'ai-mode-badge ' + m.cls; }
+    if ($('aiMode')) $('aiMode').value = mode;
+    try { localStorage.setItem(LS_MODE, mode); } catch (e) {}
+    // 仅“本地大模型”模式默认展开设置面板（首次提示配置端点）
+    const panel = $('aiSettingsPanel');
+    if (panel) panel.classList.toggle('open', mode === 'local' && !state.localConfig.baseUrl);
+  }
+
+  function loadLocalConfig() {
+    try { const raw = localStorage.getItem(LS_LOCAL); if (raw) Object.assign(state.localConfig, JSON.parse(raw)); } catch (e) {}
+    if ($('localBaseUrl')) {
+      $('localBaseUrl').value = state.localConfig.baseUrl || '';
+      $('localModel').value = state.localConfig.model || '';
+      $('localKey').value = state.localConfig.apiKey || '';
     }
+  }
+  function saveLocalConfig() {
+    state.localConfig = {
+      baseUrl: ($('localBaseUrl').value || '').trim().replace(/\/$/, ''),
+      model: ($('localModel').value || '').trim(),
+      apiKey: ($('localKey').value || '').trim(),
+    };
+    try { localStorage.setItem(LS_LOCAL, JSON.stringify(state.localConfig)); } catch (e) {}
+    setStatus('已保存 ✓', 'ok');
+  }
+  function setStatus(msg, kind) {
+    const el = $('localStatus'); if (!el) return;
+    el.textContent = msg; el.className = 'set-status ' + (kind || '');
+  }
+  async function testLocal() {
+    saveLocalConfig();
+    setStatus('测试中…', '');
+    const r = await LLMClient.respond({
+      mode: 'local', intent: 'chat', userMessage: '只回复两个字：在线',
+      context: { ping: true }, history: [], toolSchemas: [], localConfig: state.localConfig,
+    }).catch(e => ({ text: '失败：' + e.message, _err: true }));
+    setStatus(r && r.text && !r._err ? '连通 ✓ ' + r.text.slice(0, 20) : '失败，请检查端点/CORS', r && !r._err ? 'ok' : 'bad');
   }
 
   // 简单 markdown -> html（标题/加粗/代码/引用/列表）
@@ -84,6 +128,7 @@
         mode: state.mode, intent, userMessage,
         context: ctx, history: state.history.slice(-8),
         toolSchemas: AgentTools.list(),
+        localConfig: state.localConfig,
       });
     } catch (e) {
       reply = { text: '抱歉，出现错误：' + e.message, toolCalls: [], followups: [] };
@@ -125,9 +170,15 @@
     $('aiSend').onclick = () => send();
     $('aiInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 
-    // 模式切换
-    $('aiModeToggle').onchange = e => setMode(e.target.checked ? 'claude' : 'mock');
-    setMode('mock');
+    // 模式切换（本地推理 / 本地大模型 / Claude 在线）
+    loadLocalConfig();
+    $('aiMode').onchange = e => setMode(e.target.value);
+    $('aiSettingsBtn').onclick = () => $('aiSettingsPanel').classList.toggle('open');
+    $('localSave').onclick = saveLocalConfig;
+    $('localTest').onclick = testLocal;
+    let savedMode = 'mock';
+    try { savedMode = localStorage.getItem(LS_MODE) || 'mock'; } catch (e) {}
+    setMode(savedMode);
 
     // 习惯画像面板
     $('aiHabitBtn').onclick = showHabit;

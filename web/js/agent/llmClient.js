@@ -115,32 +115,109 @@
     return Promise.resolve(chat(context, userMessage));
   }
 
-  // ============ 真实 Claude 模式 ============
-  async function claudeRespond(req) {
+  // ============ 经后端代理（Claude 或 本地大模型） ============
+  async function backendRespond(req, provider) {
     const resp = await fetch((global.AI_BACKEND || '') + '/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        intent: req.intent,
-        userMessage: req.userMessage,
-        context: req.context,
-        history: req.history,
-        tools: req.toolSchemas,
+        provider,
+        intent: req.intent, userMessage: req.userMessage,
+        context: req.context, history: req.history,
+        tools: req.toolSchemas, localConfig: req.localConfig,
       }),
     });
-    if (!resp.ok) throw new Error('后端返回 ' + resp.status);
+    if (!resp.ok) {
+      let detail = resp.status;
+      try { const j = await resp.json(); detail = j.error || j.text || detail; } catch (e) {}
+      throw new Error('后端 ' + detail);
+    }
     const data = await resp.json();
     return { text: data.text || '', toolCalls: data.toolCalls || [], followups: data.followups || [] };
   }
 
+  // ============ 浏览器直连本地大模型（无后端时的兜底，OpenAI 兼容） ============
+  function userTurn(req) {
+    return req.userMessage ||
+      ({ companion: '请伴读当前页面。', analyze: '请基于当前数据分析根因。', advise: '请指引我正确提交一键一生或给出建议。' }[req.intent]) ||
+      '请帮助我。';
+  }
+  function localSystem(context, intent) {
+    return `你是“一键一生”晶圆良率根因分析平台右侧的 AI 伴读助手，能①伴读页面②分析良率根因③指引正确提交任务。
+缺陷空间特征↔根因：edge_ring↔边缘刻蚀/清洗；center↔CMP/旋涂；scratch↔机械/CMP；cluster↔腔体颗粒。
+当前意图=${intent}。请用中文、简洁、结构化回答，基于下方上下文，不要编造数值。
+若需操作页面，请额外输出一个或多个动作代码块：\n\`\`\`action\n{"tool":"工具名","input":{...}}\n\`\`\`\n可用工具：set_scenario, set_analysis_dims, run_lifecycle, focus_panel(panel∈waferMap|yieldTrend|watTrend|defectPareto|processFlow|rootCause), apply_my_habits。
+## 页面上下文\n${JSON.stringify(context)}`;
+  }
+  function openaiTools(schemas) {
+    return (schemas || []).map(s => ({ type: 'function', function: { name: s.name, description: s.description, parameters: s.input_schema } }));
+  }
+  function parseActionBlocks(text) {
+    const calls = []; let clean = text || '';
+    const re = /```(?:action|json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      try {
+        let obj = JSON.parse(m[1]);
+        const arr = Array.isArray(obj) ? obj : [obj];
+        arr.forEach(o => { if (o && o.tool) calls.push({ name: o.tool, input: o.input || {} }); });
+        if (arr.some(o => o && o.tool)) clean = clean.replace(m[0], '');
+      } catch (e) {}
+    }
+    return { clean: clean.trim(), calls };
+  }
+  async function postChat(base, key, body) {
+    const resp = await fetch(base + '/chat/completions', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error('本地模型 ' + resp.status);
+    return resp.json();
+  }
+  async function directLocalRespond(req) {
+    const cfg = req.localConfig || {};
+    const base = (cfg.baseUrl || '').replace(/\/$/, '');
+    if (!base) throw new Error('未配置本地大模型 Base URL');
+    const messages = [
+      { role: 'system', content: localSystem(req.context, req.intent) },
+      ...(req.history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.content) })),
+      { role: 'user', content: userTurn(req) },
+    ];
+    const base0 = { model: cfg.model || 'local-model', messages, temperature: 0.3, max_tokens: 1200, stream: false };
+    let data;
+    try { data = await postChat(base, cfg.apiKey, Object.assign({}, base0, { tools: openaiTools(req.toolSchemas) })); }
+    catch (e) { data = await postChat(base, cfg.apiKey, base0); } // 模型不支持 tools 时回退
+    const msg = (data.choices && data.choices[0] && data.choices[0].message) || {};
+    let text = msg.content || '';
+    const calls = (msg.tool_calls || []).map(tc => { try { return { name: tc.function.name, input: JSON.parse(tc.function.arguments || '{}') }; } catch (e) { return { name: tc.function && tc.function.name, input: {} }; } });
+    const parsed = parseActionBlocks(text); text = parsed.clean; calls.push(...parsed.calls);
+    return { text: text.trim() || '(本地模型返回空响应)', toolCalls: calls, followups: [] };
+  }
+
   async function respond(req) {
     const mode = req.mode || 'mock';
+    if (mode === 'mock') return mockRespond(req);
+
     if (mode === 'claude') {
-      try { return await claudeRespond(req); }
+      try { return await backendRespond(req, 'claude'); }
       catch (e) {
         const fb = await mockRespond(req);
         fb.text = `> ⚠️ 未能连接 Claude 后端（${e.message}），已回退本地推理。\n\n` + fb.text;
         return fb;
+      }
+    }
+
+    if (mode === 'local') {
+      // 优先经后端代理；失败再浏览器直连；再失败回退本地推理
+      try { return await backendRespond(req, 'local'); }
+      catch (e1) {
+        try { return await directLocalRespond(req); }
+        catch (e2) {
+          const fb = await mockRespond(req);
+          fb.text = `> ⚠️ 本地大模型不可用（后端：${e1.message}；直连：${e2.message}），已回退本地推理。\n\n` + fb.text;
+          return fb;
+        }
       }
     }
     return mockRespond(req);

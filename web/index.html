@@ -18,82 +18,126 @@
       </div>
     </div>
     <div class="top-actions">
+      <div class="phase-indicator">
+        <span id="phaseSetup" class="phase on">① 逐步配置</span>
+        <span class="phase-sep">→</span>
+        <span id="phaseResult" class="phase">② 结果呈现</span>
+      </div>
       <span class="env-pill">合成数据 / Synthetic</span>
     </div>
   </header>
 
   <div class="layout">
-    <!-- 左：场景设定 -->
+    <!-- 左：配置区（逐步向导 / 结果阶段折叠为摘要） -->
     <aside class="sidebar-left">
-      <section class="card">
-        <h3>① 场景设定</h3>
-        <label>Wafer ID / Lot <span class="req">*</span></label>
-        <input id="cfgWaferId" type="text" placeholder="如 W-2026-0512-07" autocomplete="off" />
-        <div class="grid2">
-          <div><label>Fab</label><select id="cfgFab"></select></div>
-          <div><label>工艺节点</label><select id="cfgNode"></select></div>
-        </div>
-        <div class="grid2">
-          <div><label>产品</label><select id="cfgProduct"></select></div>
-          <div><label>时间范围</label>
-            <select id="cfgTimeRange"><option value="30d">近30天</option><option value="7d">近7天</option><option value="90d">近90天</option></select>
+      <!-- 向导模式 -->
+      <div id="wizard" class="wizard-wrap">
+        <div class="wizard-head">
+          <div class="stepper">
+            <button class="step active" data-go="1"><b>1</b><span>场景</span></button>
+            <i class="step-line"></i>
+            <button class="step" data-go="2"><b>2</b><span>维度</span></button>
+            <i class="step-line"></i>
+            <button class="step" data-go="3"><b>3</b><span>呈现</span></button>
+            <i class="step-line"></i>
+            <button class="step" data-go="4"><b>4</b><span>提交</span></button>
           </div>
+          <button id="btnDemo" class="link-demo" title="用示例一键填好并提交">⚡ 一键示例</button>
         </div>
-        <label>预期缺陷特征（可留空自动识别）</label>
-        <select id="cfgSignature">
-          <option value="">自动识别</option>
-          <option value="edge_ring">边缘环状 Edge Ring</option>
-          <option value="center">中心聚集 Center</option>
-          <option value="scratch">划伤 Scratch</option>
-          <option value="cluster">局部簇 Cluster</option>
-          <option value="random">随机 Random</option>
-        </select>
-      </section>
 
-      <section class="card">
-        <h3>② 分析维度</h3>
-        <div class="checks">
-          <label><input type="checkbox" name="analysisDim" value="equipment" checked /> 设备/腔体关联</label>
-          <label><input type="checkbox" name="analysisDim" value="process" checked /> 工艺步骤</label>
-          <label><input type="checkbox" name="analysisDim" value="param" /> 参数漂移 (WAT)</label>
-          <label><input type="checkbox" name="analysisDim" value="defect" checked /> 缺陷特征</label>
-          <label><input type="checkbox" name="analysisDim" value="genealogy" /> 批次谱系</label>
+        <div class="wizard-body">
+          <!-- Step 1 -->
+          <section class="wizard-step" data-step="1">
+            <h3>① 场景设定</h3>
+            <p class="step-hint">定位要追溯“一生”的晶圆。</p>
+            <label>Wafer ID / Lot <span class="req">*</span></label>
+            <input id="cfgWaferId" type="text" placeholder="如 W-2026-0512-07" autocomplete="off" />
+            <div class="grid2">
+              <div><label>Fab</label><select id="cfgFab"></select></div>
+              <div><label>工艺节点</label><select id="cfgNode"></select></div>
+            </div>
+            <div class="grid2">
+              <div><label>产品</label><select id="cfgProduct"></select></div>
+              <div><label>时间范围</label>
+                <select id="cfgTimeRange"><option value="30d">近30天</option><option value="7d">近7天</option><option value="90d">近90天</option></select>
+              </div>
+            </div>
+            <label>预期缺陷特征（可留空自动识别）</label>
+            <select id="cfgSignature">
+              <option value="">自动识别</option>
+              <option value="edge_ring">边缘环状 Edge Ring</option>
+              <option value="center">中心聚集 Center</option>
+              <option value="scratch">划伤 Scratch</option>
+              <option value="cluster">局部簇 Cluster</option>
+              <option value="random">随机 Random</option>
+            </select>
+          </section>
+
+          <!-- Step 2 -->
+          <section class="wizard-step" data-step="2" hidden>
+            <h3>② 分析维度</h3>
+            <p class="step-hint">选择本次根因分析关注的维度。</p>
+            <div class="checks">
+              <label><input type="checkbox" name="analysisDim" value="equipment" checked /> 设备/腔体关联</label>
+              <label><input type="checkbox" name="analysisDim" value="process" checked /> 工艺步骤</label>
+              <label><input type="checkbox" name="analysisDim" value="param" /> 参数漂移 (WAT)</label>
+              <label><input type="checkbox" name="analysisDim" value="defect" checked /> 缺陷特征</label>
+              <label><input type="checkbox" name="analysisDim" value="genealogy" /> 批次谱系</label>
+            </div>
+          </section>
+
+          <!-- Step 3 -->
+          <section class="wizard-step" data-step="3" hidden>
+            <h3>③ 呈现内容</h3>
+            <p class="step-hint">勾选希望在右侧结果区呈现的内容。</p>
+            <div class="checks">
+              <label><input type="checkbox" name="presentation" value="waferMap" checked /> 晶圆 Bin 图</label>
+              <label><input type="checkbox" name="presentation" value="yield" checked /> 良率趋势</label>
+              <label><input type="checkbox" name="presentation" value="wat" checked /> WAT 参数趋势</label>
+              <label><input type="checkbox" name="presentation" value="defect" checked /> 缺陷 Pareto</label>
+              <label><input type="checkbox" name="presentation" value="flow" checked /> 工艺流程时间轴</label>
+            </div>
+          </section>
+
+          <!-- Step 4 -->
+          <section class="wizard-step" data-step="4" hidden>
+            <h3>④ 确认并提交</h3>
+            <p class="step-hint">核对配置，提交「一键一生」。</p>
+            <div id="cfgSummary" class="cfg-summary"></div>
+            <div class="ready-track"><div id="readyBar" class="ready-bar warn" style="width:0"></div></div>
+            <div id="readyText" class="ready-text">0% · 待补全</div>
+            <ul id="cfgIssues" class="issues"></ul>
+          </section>
         </div>
-      </section>
 
-      <section class="card">
-        <h3>③ 呈现内容</h3>
-        <div class="checks">
-          <label><input type="checkbox" name="presentation" value="waferMap" checked /> 晶圆 Bin 图</label>
-          <label><input type="checkbox" name="presentation" value="yield" checked /> 良率趋势</label>
-          <label><input type="checkbox" name="presentation" value="wat" checked /> WAT 参数趋势</label>
-          <label><input type="checkbox" name="presentation" value="defect" checked /> 缺陷 Pareto</label>
-          <label><input type="checkbox" name="presentation" value="flow" checked /> 工艺流程时间轴</label>
+        <div class="wizard-nav">
+          <button id="btnPrev" class="btn-ghost" style="visibility:hidden">← 上一步</button>
+          <button id="btnNext" class="btn-primary">下一步 →</button>
+          <button id="btnRun" class="btn-primary" style="display:none">🚀 提交一键一生</button>
         </div>
-      </section>
+      </div>
 
-      <section class="card readiness">
-        <div class="ready-track"><div id="readyBar" class="ready-bar warn" style="width:0"></div></div>
-        <div id="readyText" class="ready-text">0% · 待补全</div>
-        <ul id="cfgIssues" class="issues"></ul>
+      <!-- 结果阶段：折叠配置摘要 -->
+      <div id="configRail" class="config-rail" style="display:none">
+        <h3>当前配置</h3>
+        <div id="railChips" class="rail-chips"></div>
         <div class="btn-row">
-          <button id="btnRun" class="btn-primary">🚀 提交「一键一生」</button>
-          <button id="btnDemo" class="btn-ghost">一键示例</button>
+          <button id="btnReconfig" class="btn-primary">✎ 重新配置</button>
+          <button id="btnRerun" class="btn-ghost">重新运行</button>
         </div>
-      </section>
+      </div>
     </aside>
 
-    <!-- 中：结果呈现 -->
+    <!-- 中：结果呈现区 -->
     <main class="content">
       <div id="emptyState" class="empty">
         <div class="empty-ico">◧</div>
-        <h2>配置左侧场景，点击「一键一生」</h2>
-        <p>系统将一键还原该晶圆的全链路历史：晶圆图、良率/参数趋势、缺陷分布、工艺流程与根因候选。<br/>右侧 AI 助手会全程伴读、分析并给出建议。</p>
+        <h2>左侧逐步配置后，提交「一键一生」</h2>
+        <p>完成左侧 ①场景 → ②维度 → ③呈现 → ④提交 四步，系统将在此区域一键还原该晶圆的全链路历史：晶圆图、良率/参数趋势、缺陷分布、工艺流程与根因候选。<br/>右侧 AI 助手会全程伴读、分析并给出建议。</p>
         <button class="btn-primary" onclick="document.getElementById('btnDemo').click()">▶ 运行一个示例</button>
       </div>
 
       <div id="resultWrap" style="display:none">
-        <!-- KPI -->
         <section class="result-head">
           <div class="rs-title">
             <h2 id="rsWafer">—</h2><span id="rsMeta" class="rs-meta">—</span>
@@ -106,7 +150,6 @@
           </div>
         </section>
 
-        <!-- 根因候选 -->
         <section id="panel-rootCause" class="panel">
           <h3>🎯 根因候选 (Commonality)</h3>
           <div id="rootCauseList" class="rc-list"></div>
@@ -146,9 +189,31 @@
           <span class="ai-logo">🤖</span>
           <div><strong>AI 伴读助手</strong><span id="aiModeBadge" class="ai-mode-badge local">本地推理</span></div>
         </div>
-        <label class="switch" title="切换到真实 Claude（需后端）">
-          <input type="checkbox" id="aiModeToggle" /><span class="slider"></span><em>Claude</em>
-        </label>
+        <div class="ai-mode-ctrl">
+          <select id="aiMode" title="选择 AI 推理来源">
+            <option value="mock">本地推理</option>
+            <option value="local">本地大模型</option>
+            <option value="claude">Claude 在线</option>
+          </select>
+          <button id="aiSettingsBtn" class="mini" title="本地大模型设置">⚙</button>
+        </div>
+      </div>
+
+      <!-- 本地大模型设置 -->
+      <div id="aiSettingsPanel" class="ai-settings">
+        <div class="set-title">本地大模型（OpenAI 兼容端点）</div>
+        <label>Base URL</label>
+        <input id="localBaseUrl" type="text" placeholder="http://localhost:11434/v1" />
+        <label>模型名</label>
+        <input id="localModel" type="text" placeholder="qwen2.5:7b-instruct" />
+        <label>API Key（可选）</label>
+        <input id="localKey" type="password" placeholder="留空即可" />
+        <div class="set-actions">
+          <button id="localSave" class="btn-primary">保存</button>
+          <button id="localTest" class="btn-ghost">连通测试</button>
+          <span id="localStatus" class="set-status"></span>
+        </div>
+        <small>支持 Ollama / LM Studio / vLLM / llama.cpp 等。优先经本地后端代理；无后端时浏览器直连（需在模型服务侧开启 CORS）。</small>
       </div>
 
       <div class="ai-tabs">
@@ -173,7 +238,6 @@
     </aside>
   </div>
 
-  <!-- 数据与逻辑 -->
   <script src="js/data/mockData.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/agent/habitProfile.js"></script>
@@ -181,13 +245,14 @@
   <script src="js/agent/tools.js"></script>
   <script src="js/agent/llmClient.js"></script>
   <script src="js/agent/assistant.js"></script>
+  <script src="js/wizard.js"></script>
   <script src="js/app.js"></script>
   <script>
-    // 后端地址（如分离部署可改）；默认同源
-    window.AI_BACKEND = '';
+    window.AI_BACKEND = ''; // 后端地址；默认同源。分离部署可改。
     document.addEventListener('DOMContentLoaded', function () {
       WaferApp.initForm();
       AgentTools.bind(WaferApp);
+      Wizard.init();
       Assistant.init(WaferApp.getState);
     });
   </script>
