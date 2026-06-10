@@ -1,0 +1,4579 @@
+{
+ "master_seed": 20260610,
+ "cases": [
+  {
+   "case_id": "case_0000",
+   "layer": "V1",
+   "pattern_density": 0.758,
+   "contrast": 0.456,
+   "noise_level": 0.24,
+   "optimal_sigma": 1.102,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 0,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0001",
+   "layer": "M1",
+   "pattern_density": 0.66,
+   "contrast": 0.308,
+   "noise_level": 0.44,
+   "optimal_sigma": 1.49,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 70.5,
+     "y": 39.3,
+     "near_corner": true,
+     "near_line_end": true
+    }
+   ],
+   "seed": 1,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0002",
+   "layer": "V1",
+   "pattern_density": 0.249,
+   "contrast": 0.221,
+   "noise_level": 0.702,
+   "optimal_sigma": 1.342,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 375.4,
+     "y": 355.4,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 544.9,
+     "y": 433.9,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 2,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0003",
+   "layer": "M2",
+   "pattern_density": 0.578,
+   "contrast": 0.271,
+   "noise_level": 0.324,
+   "optimal_sigma": 1.029,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 214.6,
+     "y": 323.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 344.2,
+     "y": 521.3,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 285.6,
+     "y": 274.2,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 3,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0004",
+   "layer": "M1",
+   "pattern_density": 0.284,
+   "contrast": 0.792,
+   "noise_level": 0.748,
+   "optimal_sigma": 1.817,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 473.4,
+     "y": 158.5,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 144.4,
+     "y": 345.6,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 4,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0005",
+   "layer": "V1",
+   "pattern_density": 0.328,
+   "contrast": 0.589,
+   "noise_level": 0.734,
+   "optimal_sigma": 1.826,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 504.0,
+     "y": 525.8,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 434.2,
+     "y": 19.0,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 5,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0006",
+   "layer": "V1",
+   "pattern_density": 0.431,
+   "contrast": 0.839,
+   "noise_level": 0.01,
+   "optimal_sigma": 1.561,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 372.0,
+     "y": 313.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 569.6,
+     "y": 517.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 98.0,
+     "y": 270.7,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 6,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0007",
+   "layer": "V1",
+   "pattern_density": 0.687,
+   "contrast": 0.28,
+   "noise_level": 0.558,
+   "optimal_sigma": 1.701,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 394.0,
+     "y": 598.7,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 7,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0008",
+   "layer": "M2",
+   "pattern_density": 0.695,
+   "contrast": 0.726,
+   "noise_level": 0.041,
+   "optimal_sigma": 1.611,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 230.3,
+     "y": 112.6,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 8,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0009",
+   "layer": "M1",
+   "pattern_density": 0.645,
+   "contrast": 0.446,
+   "noise_level": 0.455,
+   "optimal_sigma": 1.368,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 426.8,
+     "y": 406.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 9,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0010",
+   "layer": "M1",
+   "pattern_density": 0.389,
+   "contrast": 0.698,
+   "noise_level": 0.543,
+   "optimal_sigma": 1.431,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 10,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0011",
+   "layer": "M2",
+   "pattern_density": 0.727,
+   "contrast": 0.372,
+   "noise_level": 0.767,
+   "optimal_sigma": 1.373,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 345.8,
+     "y": 511.3,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 148.6,
+     "y": 295.2,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 407.7,
+     "y": 488.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 11,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0012",
+   "layer": "M2",
+   "pattern_density": 0.283,
+   "contrast": 0.26,
+   "noise_level": 0.474,
+   "optimal_sigma": 1.209,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 309.7,
+     "y": 551.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 12,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0013",
+   "layer": "M2",
+   "pattern_density": 0.304,
+   "contrast": 0.448,
+   "noise_level": 0.221,
+   "optimal_sigma": 1.71,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 329.3,
+     "y": 243.2,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 390.4,
+     "y": 272.1,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 13,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0014",
+   "layer": "M1",
+   "pattern_density": 0.594,
+   "contrast": 0.845,
+   "noise_level": 0.339,
+   "optimal_sigma": 1.401,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 484.1,
+     "y": 345.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 450.5,
+     "y": 11.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 261.9,
+     "y": 279.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 14,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0015",
+   "layer": "M2",
+   "pattern_density": 0.808,
+   "contrast": 0.217,
+   "noise_level": 0.011,
+   "optimal_sigma": 1.069,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 15,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0016",
+   "layer": "M1",
+   "pattern_density": 0.403,
+   "contrast": 0.36,
+   "noise_level": 0.363,
+   "optimal_sigma": 1.895,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 90.4,
+     "y": 394.5,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 281.6,
+     "y": 63.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 16,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0017",
+   "layer": "V1",
+   "pattern_density": 0.272,
+   "contrast": 0.949,
+   "noise_level": 0.21,
+   "optimal_sigma": 1.645,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 400.9,
+     "y": 104.0,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 114.9,
+     "y": 322.3,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 246.7,
+     "y": 141.9,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 17,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0018",
+   "layer": "M1",
+   "pattern_density": 0.722,
+   "contrast": 0.651,
+   "noise_level": 0.423,
+   "optimal_sigma": 1.187,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 70.5,
+     "y": 489.5,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 422.8,
+     "y": 524.3,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 18,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0019",
+   "layer": "M1",
+   "pattern_density": 0.406,
+   "contrast": 0.743,
+   "noise_level": 0.188,
+   "optimal_sigma": 1.584,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 47.2,
+     "y": 306.2,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 144.7,
+     "y": 407.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 19,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0020",
+   "layer": "M1",
+   "pattern_density": 0.313,
+   "contrast": 0.559,
+   "noise_level": 0.405,
+   "optimal_sigma": 1.054,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 139.1,
+     "y": 167.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 20,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0021",
+   "layer": "V1",
+   "pattern_density": 0.829,
+   "contrast": 0.679,
+   "noise_level": 0.396,
+   "optimal_sigma": 1.806,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 57.9,
+     "y": 392.4,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 428.2,
+     "y": 291.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 21,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0022",
+   "layer": "M2",
+   "pattern_density": 0.842,
+   "contrast": 0.709,
+   "noise_level": 0.33,
+   "optimal_sigma": 1.06,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 594.1,
+     "y": 487.5,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 464.6,
+     "y": 206.5,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 362.4,
+     "y": 272.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 22,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0023",
+   "layer": "V1",
+   "pattern_density": 0.653,
+   "contrast": 0.396,
+   "noise_level": 0.06,
+   "optimal_sigma": 1.501,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 7.0,
+     "y": 405.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 23,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0024",
+   "layer": "M1",
+   "pattern_density": 0.232,
+   "contrast": 0.653,
+   "noise_level": 0.435,
+   "optimal_sigma": 1.812,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 104.2,
+     "y": 214.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 217.1,
+     "y": 164.1,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 457.2,
+     "y": 201.1,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 24,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0025",
+   "layer": "V1",
+   "pattern_density": 0.803,
+   "contrast": 0.601,
+   "noise_level": 0.596,
+   "optimal_sigma": 1.508,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 25,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0026",
+   "layer": "V1",
+   "pattern_density": 0.229,
+   "contrast": 0.86,
+   "noise_level": 0.682,
+   "optimal_sigma": 1.015,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 26,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0027",
+   "layer": "M1",
+   "pattern_density": 0.537,
+   "contrast": 0.286,
+   "noise_level": 0.022,
+   "optimal_sigma": 1.125,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 469.3,
+     "y": 479.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 27,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0028",
+   "layer": "M1",
+   "pattern_density": 0.388,
+   "contrast": 0.726,
+   "noise_level": 0.139,
+   "optimal_sigma": 1.025,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 305.4,
+     "y": 437.8,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 461.8,
+     "y": 82.1,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 329.3,
+     "y": 47.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 28,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0029",
+   "layer": "M2",
+   "pattern_density": 0.624,
+   "contrast": 0.809,
+   "noise_level": 0.338,
+   "optimal_sigma": 1.192,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 380.0,
+     "y": 186.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 525.3,
+     "y": 375.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 29,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0030",
+   "layer": "M1",
+   "pattern_density": 0.54,
+   "contrast": 0.349,
+   "noise_level": 0.125,
+   "optimal_sigma": 1.422,
+   "charging": true,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 228.2,
+     "y": 36.9,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 30,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0031",
+   "layer": "V1",
+   "pattern_density": 0.479,
+   "contrast": 0.905,
+   "noise_level": 0.34,
+   "optimal_sigma": 1.854,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 87.5,
+     "y": 543.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 31,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0032",
+   "layer": "M1",
+   "pattern_density": 0.801,
+   "contrast": 0.52,
+   "noise_level": 0.719,
+   "optimal_sigma": 1.813,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 142.2,
+     "y": 312.9,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 32,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0033",
+   "layer": "M2",
+   "pattern_density": 0.25,
+   "contrast": 0.806,
+   "noise_level": 0.056,
+   "optimal_sigma": 1.104,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 97.6,
+     "y": 561.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 504.7,
+     "y": 156.4,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 501.2,
+     "y": 272.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 33,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0034",
+   "layer": "M2",
+   "pattern_density": 0.754,
+   "contrast": 0.475,
+   "noise_level": 0.561,
+   "optimal_sigma": 1.185,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 34,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0035",
+   "layer": "V1",
+   "pattern_density": 0.589,
+   "contrast": 0.91,
+   "noise_level": 0.527,
+   "optimal_sigma": 1.255,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 582.9,
+     "y": 90.4,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 413.9,
+     "y": 424.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 35,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0036",
+   "layer": "V1",
+   "pattern_density": 0.597,
+   "contrast": 0.437,
+   "noise_level": 0.194,
+   "optimal_sigma": 1.047,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 299.4,
+     "y": 518.5,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 490.7,
+     "y": 248.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 36,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0037",
+   "layer": "M1",
+   "pattern_density": 0.604,
+   "contrast": 0.708,
+   "noise_level": 0.533,
+   "optimal_sigma": 1.099,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 60.7,
+     "y": 101.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 87.3,
+     "y": 426.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 37,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0038",
+   "layer": "V1",
+   "pattern_density": 0.414,
+   "contrast": 0.318,
+   "noise_level": 0.465,
+   "optimal_sigma": 1.608,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 478.0,
+     "y": 424.6,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 38,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0039",
+   "layer": "V1",
+   "pattern_density": 0.234,
+   "contrast": 0.78,
+   "noise_level": 0.028,
+   "optimal_sigma": 1.141,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 553.4,
+     "y": 365.7,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 417.9,
+     "y": 494.8,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 39,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0040",
+   "layer": "M2",
+   "pattern_density": 0.406,
+   "contrast": 0.482,
+   "noise_level": 0.721,
+   "optimal_sigma": 1.388,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 169.9,
+     "y": 252.4,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 101.6,
+     "y": 203.5,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 520.2,
+     "y": 34.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 40,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0041",
+   "layer": "M2",
+   "pattern_density": 0.734,
+   "contrast": 0.215,
+   "noise_level": 0.028,
+   "optimal_sigma": 1.295,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 41,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0042",
+   "layer": "M2",
+   "pattern_density": 0.201,
+   "contrast": 0.538,
+   "noise_level": 0.291,
+   "optimal_sigma": 1.637,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 42,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0043",
+   "layer": "M2",
+   "pattern_density": 0.545,
+   "contrast": 0.363,
+   "noise_level": 0.394,
+   "optimal_sigma": 1.728,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 564.4,
+     "y": 365.5,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 588.0,
+     "y": 95.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 43,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0044",
+   "layer": "V1",
+   "pattern_density": 0.47,
+   "contrast": 0.791,
+   "noise_level": 0.309,
+   "optimal_sigma": 1.29,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 44,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0045",
+   "layer": "V1",
+   "pattern_density": 0.224,
+   "contrast": 0.928,
+   "noise_level": 0.377,
+   "optimal_sigma": 1.357,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 45,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0046",
+   "layer": "V1",
+   "pattern_density": 0.537,
+   "contrast": 0.675,
+   "noise_level": 0.357,
+   "optimal_sigma": 1.338,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 46,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0047",
+   "layer": "M1",
+   "pattern_density": 0.531,
+   "contrast": 0.211,
+   "noise_level": 0.091,
+   "optimal_sigma": 1.436,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 354.5,
+     "y": 311.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 47,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0048",
+   "layer": "M2",
+   "pattern_density": 0.459,
+   "contrast": 0.43,
+   "noise_level": 0.74,
+   "optimal_sigma": 1.262,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 113.0,
+     "y": 340.8,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 381.3,
+     "y": 318.9,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 390.1,
+     "y": 222.0,
+     "near_corner": true,
+     "near_line_end": true
+    }
+   ],
+   "seed": 48,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0049",
+   "layer": "M2",
+   "pattern_density": 0.82,
+   "contrast": 0.778,
+   "noise_level": 0.574,
+   "optimal_sigma": 1.731,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 49,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0050",
+   "layer": "V1",
+   "pattern_density": 0.861,
+   "contrast": 0.829,
+   "noise_level": 0.52,
+   "optimal_sigma": 1.43,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 54.2,
+     "y": 103.3,
+     "near_corner": true,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 182.7,
+     "y": 343.4,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 321.3,
+     "y": 512.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 50,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0051",
+   "layer": "M1",
+   "pattern_density": 0.659,
+   "contrast": 0.681,
+   "noise_level": 0.483,
+   "optimal_sigma": 1.38,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 507.3,
+     "y": 435.9,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 241.8,
+     "y": 154.8,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 479.1,
+     "y": 383.5,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 51,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0052",
+   "layer": "M1",
+   "pattern_density": 0.351,
+   "contrast": 0.76,
+   "noise_level": 0.45,
+   "optimal_sigma": 1.782,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 461.2,
+     "y": 393.6,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 52,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0053",
+   "layer": "M2",
+   "pattern_density": 0.753,
+   "contrast": 0.4,
+   "noise_level": 0.344,
+   "optimal_sigma": 1.212,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 173.7,
+     "y": 474.9,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 53,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0054",
+   "layer": "M2",
+   "pattern_density": 0.833,
+   "contrast": 0.858,
+   "noise_level": 0.288,
+   "optimal_sigma": 1.445,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 10.7,
+     "y": 539.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 397.9,
+     "y": 422.4,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 520.6,
+     "y": 506.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 54,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0055",
+   "layer": "M2",
+   "pattern_density": 0.58,
+   "contrast": 0.428,
+   "noise_level": 0.1,
+   "optimal_sigma": 1.853,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 356.6,
+     "y": 38.4,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 273.9,
+     "y": 227.9,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 55,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0056",
+   "layer": "M1",
+   "pattern_density": 0.389,
+   "contrast": 0.458,
+   "noise_level": 0.062,
+   "optimal_sigma": 1.482,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 127.7,
+     "y": 14.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 56,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0057",
+   "layer": "V1",
+   "pattern_density": 0.512,
+   "contrast": 0.594,
+   "noise_level": 0.182,
+   "optimal_sigma": 1.085,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 92.3,
+     "y": 546.9,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 57,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0058",
+   "layer": "M2",
+   "pattern_density": 0.315,
+   "contrast": 0.91,
+   "noise_level": 0.178,
+   "optimal_sigma": 1.107,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 348.7,
+     "y": 434.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 58,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0059",
+   "layer": "V1",
+   "pattern_density": 0.446,
+   "contrast": 0.599,
+   "noise_level": 0.122,
+   "optimal_sigma": 1.016,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 152.7,
+     "y": 47.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 59,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0060",
+   "layer": "V1",
+   "pattern_density": 0.705,
+   "contrast": 0.515,
+   "noise_level": 0.057,
+   "optimal_sigma": 1.585,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 380.4,
+     "y": 541.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 180.1,
+     "y": 8.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 60,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0061",
+   "layer": "M1",
+   "pattern_density": 0.233,
+   "contrast": 0.916,
+   "noise_level": 0.528,
+   "optimal_sigma": 1.182,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 173.5,
+     "y": 229.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 193.1,
+     "y": 58.6,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 61,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0062",
+   "layer": "M2",
+   "pattern_density": 0.239,
+   "contrast": 0.741,
+   "noise_level": 0.362,
+   "optimal_sigma": 1.178,
+   "charging": true,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 37.6,
+     "y": 219.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 62,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0063",
+   "layer": "M2",
+   "pattern_density": 0.652,
+   "contrast": 0.513,
+   "noise_level": 0.657,
+   "optimal_sigma": 1.699,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 282.1,
+     "y": 367.7,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 63,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0064",
+   "layer": "M2",
+   "pattern_density": 0.786,
+   "contrast": 0.77,
+   "noise_level": 0.154,
+   "optimal_sigma": 1.031,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 409.1,
+     "y": 179.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 570.2,
+     "y": 492.9,
+     "near_corner": true,
+     "near_line_end": true
+    }
+   ],
+   "seed": 64,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0065",
+   "layer": "M1",
+   "pattern_density": 0.622,
+   "contrast": 0.847,
+   "noise_level": 0.441,
+   "optimal_sigma": 1.753,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 193.9,
+     "y": 398.1,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 65,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0066",
+   "layer": "V1",
+   "pattern_density": 0.349,
+   "contrast": 0.533,
+   "noise_level": 0.617,
+   "optimal_sigma": 1.058,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 318.7,
+     "y": 82.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 372.7,
+     "y": 235.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 66,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0067",
+   "layer": "M2",
+   "pattern_density": 0.459,
+   "contrast": 0.524,
+   "noise_level": 0.311,
+   "optimal_sigma": 1.834,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 577.4,
+     "y": 70.2,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 5.9,
+     "y": 268.8,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 373.9,
+     "y": 196.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 67,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0068",
+   "layer": "M1",
+   "pattern_density": 0.527,
+   "contrast": 0.395,
+   "noise_level": 0.313,
+   "optimal_sigma": 1.369,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 55.4,
+     "y": 112.7,
+     "near_corner": true,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 259.7,
+     "y": 593.1,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 188.7,
+     "y": 341.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 68,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0069",
+   "layer": "V1",
+   "pattern_density": 0.749,
+   "contrast": 0.518,
+   "noise_level": 0.223,
+   "optimal_sigma": 1.745,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 69,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0070",
+   "layer": "M1",
+   "pattern_density": 0.653,
+   "contrast": 0.875,
+   "noise_level": 0.619,
+   "optimal_sigma": 1.643,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 326.1,
+     "y": 421.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 350.2,
+     "y": 80.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 429.7,
+     "y": 548.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 70,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0071",
+   "layer": "M2",
+   "pattern_density": 0.769,
+   "contrast": 0.671,
+   "noise_level": 0.75,
+   "optimal_sigma": 1.298,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 71,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0072",
+   "layer": "V1",
+   "pattern_density": 0.495,
+   "contrast": 0.928,
+   "noise_level": 0.785,
+   "optimal_sigma": 1.794,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 360.8,
+     "y": 257.0,
+     "near_corner": true,
+     "near_line_end": true
+    }
+   ],
+   "seed": 72,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0073",
+   "layer": "M1",
+   "pattern_density": 0.882,
+   "contrast": 0.798,
+   "noise_level": 0.449,
+   "optimal_sigma": 1.463,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 73,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0074",
+   "layer": "M2",
+   "pattern_density": 0.63,
+   "contrast": 0.928,
+   "noise_level": 0.065,
+   "optimal_sigma": 1.111,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 573.8,
+     "y": 473.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 501.3,
+     "y": 151.8,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 454.1,
+     "y": 260.0,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 74,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0075",
+   "layer": "V1",
+   "pattern_density": 0.356,
+   "contrast": 0.318,
+   "noise_level": 0.775,
+   "optimal_sigma": 1.304,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 241.7,
+     "y": 214.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 548.8,
+     "y": 203.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 75,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0076",
+   "layer": "M1",
+   "pattern_density": 0.58,
+   "contrast": 0.284,
+   "noise_level": 0.405,
+   "optimal_sigma": 1.522,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 373.2,
+     "y": 301.3,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 587.2,
+     "y": 374.1,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 76,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0077",
+   "layer": "M2",
+   "pattern_density": 0.747,
+   "contrast": 0.43,
+   "noise_level": 0.642,
+   "optimal_sigma": 1.202,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 508.2,
+     "y": 332.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 399.6,
+     "y": 585.6,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 77,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0078",
+   "layer": "M1",
+   "pattern_density": 0.746,
+   "contrast": 0.776,
+   "noise_level": 0.442,
+   "optimal_sigma": 1.78,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 43.0,
+     "y": 104.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 14.0,
+     "y": 83.9,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 78,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0079",
+   "layer": "M2",
+   "pattern_density": 0.562,
+   "contrast": 0.403,
+   "noise_level": 0.718,
+   "optimal_sigma": 1.67,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 91.7,
+     "y": 456.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 79,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0080",
+   "layer": "M2",
+   "pattern_density": 0.428,
+   "contrast": 0.246,
+   "noise_level": 0.483,
+   "optimal_sigma": 1.311,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 291.1,
+     "y": 384.3,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 596.4,
+     "y": 530.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 411.6,
+     "y": 204.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 80,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0081",
+   "layer": "M2",
+   "pattern_density": 0.464,
+   "contrast": 0.643,
+   "noise_level": 0.411,
+   "optimal_sigma": 1.58,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 249.6,
+     "y": 491.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 81,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0082",
+   "layer": "M2",
+   "pattern_density": 0.809,
+   "contrast": 0.435,
+   "noise_level": 0.112,
+   "optimal_sigma": 1.639,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 111.4,
+     "y": 436.4,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 40.5,
+     "y": 381.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 82,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0083",
+   "layer": "V1",
+   "pattern_density": 0.244,
+   "contrast": 0.284,
+   "noise_level": 0.468,
+   "optimal_sigma": 1.344,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 51.1,
+     "y": 168.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 42.2,
+     "y": 351.8,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 188.1,
+     "y": 382.9,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 83,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0084",
+   "layer": "V1",
+   "pattern_density": 0.292,
+   "contrast": 0.341,
+   "noise_level": 0.67,
+   "optimal_sigma": 1.644,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 472.9,
+     "y": 453.7,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 84,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0085",
+   "layer": "M2",
+   "pattern_density": 0.648,
+   "contrast": 0.664,
+   "noise_level": 0.013,
+   "optimal_sigma": 1.287,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 495.0,
+     "y": 54.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 85,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0086",
+   "layer": "M1",
+   "pattern_density": 0.56,
+   "contrast": 0.71,
+   "noise_level": 0.39,
+   "optimal_sigma": 1.184,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 197.5,
+     "y": 107.5,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 577.2,
+     "y": 157.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 86,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0087",
+   "layer": "M1",
+   "pattern_density": 0.368,
+   "contrast": 0.541,
+   "noise_level": 0.486,
+   "optimal_sigma": 1.786,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 338.8,
+     "y": 259.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 87,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0088",
+   "layer": "M1",
+   "pattern_density": 0.542,
+   "contrast": 0.843,
+   "noise_level": 0.476,
+   "optimal_sigma": 1.014,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 88,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0089",
+   "layer": "V1",
+   "pattern_density": 0.653,
+   "contrast": 0.434,
+   "noise_level": 0.259,
+   "optimal_sigma": 1.283,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 339.0,
+     "y": 522.6,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 296.8,
+     "y": 584.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 89,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0090",
+   "layer": "M1",
+   "pattern_density": 0.23,
+   "contrast": 0.208,
+   "noise_level": 0.788,
+   "optimal_sigma": 1.427,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 90,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0091",
+   "layer": "M1",
+   "pattern_density": 0.276,
+   "contrast": 0.701,
+   "noise_level": 0.39,
+   "optimal_sigma": 1.801,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 78.1,
+     "y": 292.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 91,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0092",
+   "layer": "M1",
+   "pattern_density": 0.799,
+   "contrast": 0.498,
+   "noise_level": 0.536,
+   "optimal_sigma": 1.502,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 324.5,
+     "y": 356.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 289.2,
+     "y": 446.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 92,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0093",
+   "layer": "V1",
+   "pattern_density": 0.755,
+   "contrast": 0.583,
+   "noise_level": 0.119,
+   "optimal_sigma": 1.664,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 498.0,
+     "y": 391.1,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 63.8,
+     "y": 519.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 93,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0094",
+   "layer": "V1",
+   "pattern_density": 0.525,
+   "contrast": 0.88,
+   "noise_level": 0.082,
+   "optimal_sigma": 1.311,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 514.8,
+     "y": 496.4,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 308.3,
+     "y": 542.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 194.6,
+     "y": 26.6,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 94,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0095",
+   "layer": "M1",
+   "pattern_density": 0.822,
+   "contrast": 0.884,
+   "noise_level": 0.172,
+   "optimal_sigma": 1.625,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 575.9,
+     "y": 320.5,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 95,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0096",
+   "layer": "M1",
+   "pattern_density": 0.856,
+   "contrast": 0.249,
+   "noise_level": 0.187,
+   "optimal_sigma": 1.467,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 213.2,
+     "y": 524.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 96,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0097",
+   "layer": "M2",
+   "pattern_density": 0.279,
+   "contrast": 0.789,
+   "noise_level": 0.281,
+   "optimal_sigma": 1.84,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 362.5,
+     "y": 202.2,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 490.7,
+     "y": 420.4,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 50.4,
+     "y": 41.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 97,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0098",
+   "layer": "M2",
+   "pattern_density": 0.868,
+   "contrast": 0.523,
+   "noise_level": 0.154,
+   "optimal_sigma": 1.144,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 78.8,
+     "y": 373.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 424.5,
+     "y": 93.0,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 98,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0099",
+   "layer": "M1",
+   "pattern_density": 0.488,
+   "contrast": 0.723,
+   "noise_level": 0.798,
+   "optimal_sigma": 1.012,
+   "charging": true,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 168.9,
+     "y": 346.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 99,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0100",
+   "layer": "V1",
+   "pattern_density": 0.267,
+   "contrast": 0.845,
+   "noise_level": 0.358,
+   "optimal_sigma": 1.717,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 353.3,
+     "y": 200.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 190.5,
+     "y": 69.6,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 504.9,
+     "y": 117.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 100,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0101",
+   "layer": "V1",
+   "pattern_density": 0.647,
+   "contrast": 0.567,
+   "noise_level": 0.314,
+   "optimal_sigma": 1.208,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 101,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0102",
+   "layer": "M1",
+   "pattern_density": 0.221,
+   "contrast": 0.486,
+   "noise_level": 0.239,
+   "optimal_sigma": 1.329,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 345.0,
+     "y": 584.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 102,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0103",
+   "layer": "V1",
+   "pattern_density": 0.407,
+   "contrast": 0.425,
+   "noise_level": 0.283,
+   "optimal_sigma": 1.489,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 103,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0104",
+   "layer": "M1",
+   "pattern_density": 0.352,
+   "contrast": 0.254,
+   "noise_level": 0.003,
+   "optimal_sigma": 1.74,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 161.0,
+     "y": 159.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 254.3,
+     "y": 118.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 104,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0105",
+   "layer": "V1",
+   "pattern_density": 0.289,
+   "contrast": 0.523,
+   "noise_level": 0.652,
+   "optimal_sigma": 1.585,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 193.5,
+     "y": 51.1,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 287.4,
+     "y": 424.3,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 559.0,
+     "y": 363.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 105,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0106",
+   "layer": "V1",
+   "pattern_density": 0.313,
+   "contrast": 0.871,
+   "noise_level": 0.71,
+   "optimal_sigma": 1.266,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 106,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0107",
+   "layer": "V1",
+   "pattern_density": 0.512,
+   "contrast": 0.675,
+   "noise_level": 0.679,
+   "optimal_sigma": 1.603,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 89.1,
+     "y": 43.9,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 107,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0108",
+   "layer": "M2",
+   "pattern_density": 0.841,
+   "contrast": 0.303,
+   "noise_level": 0.175,
+   "optimal_sigma": 1.484,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 556.1,
+     "y": 405.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 108,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0109",
+   "layer": "M2",
+   "pattern_density": 0.346,
+   "contrast": 0.881,
+   "noise_level": 0.282,
+   "optimal_sigma": 1.69,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 273.7,
+     "y": 555.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 71.2,
+     "y": 333.7,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 109,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0110",
+   "layer": "M1",
+   "pattern_density": 0.756,
+   "contrast": 0.211,
+   "noise_level": 0.078,
+   "optimal_sigma": 1.633,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 453.8,
+     "y": 65.3,
+     "near_corner": true,
+     "near_line_end": true
+    }
+   ],
+   "seed": 110,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0111",
+   "layer": "V1",
+   "pattern_density": 0.738,
+   "contrast": 0.441,
+   "noise_level": 0.496,
+   "optimal_sigma": 1.836,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 326.8,
+     "y": 130.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 111,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0112",
+   "layer": "M2",
+   "pattern_density": 0.846,
+   "contrast": 0.889,
+   "noise_level": 0.391,
+   "optimal_sigma": 1.857,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 129.1,
+     "y": 240.5,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 541.5,
+     "y": 246.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 97.2,
+     "y": 436.1,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 112,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0113",
+   "layer": "V1",
+   "pattern_density": 0.728,
+   "contrast": 0.676,
+   "noise_level": 0.781,
+   "optimal_sigma": 1.762,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 399.4,
+     "y": 131.2,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 101.7,
+     "y": 237.4,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 113,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0114",
+   "layer": "M2",
+   "pattern_density": 0.453,
+   "contrast": 0.261,
+   "noise_level": 0.53,
+   "optimal_sigma": 1.352,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 114,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0115",
+   "layer": "V1",
+   "pattern_density": 0.663,
+   "contrast": 0.224,
+   "noise_level": 0.322,
+   "optimal_sigma": 1.159,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 115,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0116",
+   "layer": "V1",
+   "pattern_density": 0.774,
+   "contrast": 0.568,
+   "noise_level": 0.202,
+   "optimal_sigma": 1.734,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 412.6,
+     "y": 240.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 578.0,
+     "y": 377.2,
+     "near_corner": true,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 84.9,
+     "y": 551.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 116,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0117",
+   "layer": "M2",
+   "pattern_density": 0.487,
+   "contrast": 0.222,
+   "noise_level": 0.085,
+   "optimal_sigma": 1.155,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 117,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0118",
+   "layer": "M1",
+   "pattern_density": 0.704,
+   "contrast": 0.463,
+   "noise_level": 0.369,
+   "optimal_sigma": 1.121,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 165.5,
+     "y": 215.5,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 17.1,
+     "y": 2.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 578.2,
+     "y": 249.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 118,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0119",
+   "layer": "M1",
+   "pattern_density": 0.37,
+   "contrast": 0.914,
+   "noise_level": 0.225,
+   "optimal_sigma": 1.361,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 544.5,
+     "y": 99.7,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 119,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0120",
+   "layer": "M1",
+   "pattern_density": 0.62,
+   "contrast": 0.549,
+   "noise_level": 0.237,
+   "optimal_sigma": 1.538,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 417.3,
+     "y": 305.5,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 210.2,
+     "y": 397.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 120,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0121",
+   "layer": "M2",
+   "pattern_density": 0.512,
+   "contrast": 0.392,
+   "noise_level": 0.466,
+   "optimal_sigma": 1.403,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 401.8,
+     "y": 9.7,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 413.2,
+     "y": 412.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 121,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0122",
+   "layer": "M2",
+   "pattern_density": 0.52,
+   "contrast": 0.419,
+   "noise_level": 0.253,
+   "optimal_sigma": 1.308,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 119.7,
+     "y": 361.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 122,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0123",
+   "layer": "M1",
+   "pattern_density": 0.233,
+   "contrast": 0.837,
+   "noise_level": 0.186,
+   "optimal_sigma": 1.371,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 88.4,
+     "y": 102.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 584.2,
+     "y": 14.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 123,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0124",
+   "layer": "M2",
+   "pattern_density": 0.329,
+   "contrast": 0.392,
+   "noise_level": 0.719,
+   "optimal_sigma": 1.45,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 153.0,
+     "y": 589.3,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 436.5,
+     "y": 269.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 124,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0125",
+   "layer": "V1",
+   "pattern_density": 0.536,
+   "contrast": 0.603,
+   "noise_level": 0.661,
+   "optimal_sigma": 1.146,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 125,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0126",
+   "layer": "M2",
+   "pattern_density": 0.361,
+   "contrast": 0.667,
+   "noise_level": 0.622,
+   "optimal_sigma": 1.883,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 367.2,
+     "y": 420.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 126,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0127",
+   "layer": "M2",
+   "pattern_density": 0.681,
+   "contrast": 0.745,
+   "noise_level": 0.707,
+   "optimal_sigma": 1.649,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 571.9,
+     "y": 320.9,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 551.7,
+     "y": 339.4,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 534.1,
+     "y": 195.9,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 127,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0128",
+   "layer": "M1",
+   "pattern_density": 0.568,
+   "contrast": 0.448,
+   "noise_level": 0.137,
+   "optimal_sigma": 1.822,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 85.6,
+     "y": 379.8,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 582.6,
+     "y": 338.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 306.2,
+     "y": 340.1,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 128,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0129",
+   "layer": "M1",
+   "pattern_density": 0.533,
+   "contrast": 0.601,
+   "noise_level": 0.047,
+   "optimal_sigma": 1.853,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 575.9,
+     "y": 146.7,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 129,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0130",
+   "layer": "V1",
+   "pattern_density": 0.766,
+   "contrast": 0.425,
+   "noise_level": 0.233,
+   "optimal_sigma": 1.641,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 543.5,
+     "y": 405.6,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 94.2,
+     "y": 128.4,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 165.0,
+     "y": 385.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 130,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0131",
+   "layer": "M1",
+   "pattern_density": 0.426,
+   "contrast": 0.816,
+   "noise_level": 0.588,
+   "optimal_sigma": 1.613,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 131,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0132",
+   "layer": "M2",
+   "pattern_density": 0.577,
+   "contrast": 0.327,
+   "noise_level": 0.418,
+   "optimal_sigma": 1.893,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 444.0,
+     "y": 411.1,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 120.1,
+     "y": 211.4,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 478.1,
+     "y": 40.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 132,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0133",
+   "layer": "V1",
+   "pattern_density": 0.402,
+   "contrast": 0.209,
+   "noise_level": 0.149,
+   "optimal_sigma": 1.178,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 133,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0134",
+   "layer": "V1",
+   "pattern_density": 0.303,
+   "contrast": 0.282,
+   "noise_level": 0.326,
+   "optimal_sigma": 1.009,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 134,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0135",
+   "layer": "M1",
+   "pattern_density": 0.374,
+   "contrast": 0.534,
+   "noise_level": 0.186,
+   "optimal_sigma": 1.77,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 210.0,
+     "y": 221.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 135,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0136",
+   "layer": "M1",
+   "pattern_density": 0.432,
+   "contrast": 0.485,
+   "noise_level": 0.457,
+   "optimal_sigma": 1.461,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 72.7,
+     "y": 416.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 136,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0137",
+   "layer": "M2",
+   "pattern_density": 0.837,
+   "contrast": 0.578,
+   "noise_level": 0.2,
+   "optimal_sigma": 1.481,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 137,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0138",
+   "layer": "M2",
+   "pattern_density": 0.36,
+   "contrast": 0.893,
+   "noise_level": 0.495,
+   "optimal_sigma": 1.831,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 481.1,
+     "y": 543.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 378.0,
+     "y": 579.6,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 138,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0139",
+   "layer": "M1",
+   "pattern_density": 0.534,
+   "contrast": 0.509,
+   "noise_level": 0.497,
+   "optimal_sigma": 1.243,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 573.2,
+     "y": 172.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 401.4,
+     "y": 448.0,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 139,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0140",
+   "layer": "M2",
+   "pattern_density": 0.299,
+   "contrast": 0.325,
+   "noise_level": 0.665,
+   "optimal_sigma": 1.105,
+   "charging": true,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 140,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0141",
+   "layer": "V1",
+   "pattern_density": 0.611,
+   "contrast": 0.776,
+   "noise_level": 0.443,
+   "optimal_sigma": 1.432,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 14.0,
+     "y": 429.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 299.4,
+     "y": 346.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 141,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0142",
+   "layer": "M1",
+   "pattern_density": 0.584,
+   "contrast": 0.359,
+   "noise_level": 0.259,
+   "optimal_sigma": 1.66,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 461.2,
+     "y": 95.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 450.4,
+     "y": 375.1,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 293.8,
+     "y": 49.1,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 142,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0143",
+   "layer": "M1",
+   "pattern_density": 0.453,
+   "contrast": 0.51,
+   "noise_level": 0.572,
+   "optimal_sigma": 1.382,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 358.0,
+     "y": 9.8,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 143,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0144",
+   "layer": "M2",
+   "pattern_density": 0.366,
+   "contrast": 0.256,
+   "noise_level": 0.354,
+   "optimal_sigma": 1.385,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 534.5,
+     "y": 127.1,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 240.8,
+     "y": 453.0,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 136.7,
+     "y": 512.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 144,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0145",
+   "layer": "V1",
+   "pattern_density": 0.501,
+   "contrast": 0.716,
+   "noise_level": 0.228,
+   "optimal_sigma": 1.547,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 145,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0146",
+   "layer": "M1",
+   "pattern_density": 0.484,
+   "contrast": 0.813,
+   "noise_level": 0.293,
+   "optimal_sigma": 1.188,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 565.1,
+     "y": 550.2,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 388.8,
+     "y": 369.4,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 146,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0147",
+   "layer": "M1",
+   "pattern_density": 0.882,
+   "contrast": 0.572,
+   "noise_level": 0.659,
+   "optimal_sigma": 1.847,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 216.3,
+     "y": 125.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 147,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0148",
+   "layer": "V1",
+   "pattern_density": 0.747,
+   "contrast": 0.212,
+   "noise_level": 0.361,
+   "optimal_sigma": 1.617,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 576.4,
+     "y": 248.3,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 456.4,
+     "y": 219.3,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 148,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0149",
+   "layer": "M2",
+   "pattern_density": 0.524,
+   "contrast": 0.888,
+   "noise_level": 0.433,
+   "optimal_sigma": 1.124,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 149,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0150",
+   "layer": "M1",
+   "pattern_density": 0.498,
+   "contrast": 0.832,
+   "noise_level": 0.26,
+   "optimal_sigma": 1.234,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 515.3,
+     "y": 120.3,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 578.6,
+     "y": 533.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 152.8,
+     "y": 490.0,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 150,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0151",
+   "layer": "M1",
+   "pattern_density": 0.741,
+   "contrast": 0.69,
+   "noise_level": 0.285,
+   "optimal_sigma": 1.191,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 30.0,
+     "y": 178.3,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 138.1,
+     "y": 431.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 151,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0152",
+   "layer": "M2",
+   "pattern_density": 0.518,
+   "contrast": 0.817,
+   "noise_level": 0.546,
+   "optimal_sigma": 1.132,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 44.8,
+     "y": 180.1,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 488.4,
+     "y": 566.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "intrusion",
+     "x": 47.4,
+     "y": 91.7,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 152,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0153",
+   "layer": "M1",
+   "pattern_density": 0.764,
+   "contrast": 0.922,
+   "noise_level": 0.091,
+   "optimal_sigma": 1.485,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 153,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0154",
+   "layer": "V1",
+   "pattern_density": 0.879,
+   "contrast": 0.245,
+   "noise_level": 0.767,
+   "optimal_sigma": 1.749,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 154,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0155",
+   "layer": "M1",
+   "pattern_density": 0.65,
+   "contrast": 0.546,
+   "noise_level": 0.673,
+   "optimal_sigma": 1.089,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 155,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0156",
+   "layer": "M2",
+   "pattern_density": 0.713,
+   "contrast": 0.311,
+   "noise_level": 0.137,
+   "optimal_sigma": 1.608,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 204.6,
+     "y": 345.7,
+     "near_corner": true,
+     "near_line_end": false
+    }
+   ],
+   "seed": 156,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0157",
+   "layer": "M1",
+   "pattern_density": 0.734,
+   "contrast": 0.711,
+   "noise_level": 0.026,
+   "optimal_sigma": 1.745,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 157,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0158",
+   "layer": "V1",
+   "pattern_density": 0.583,
+   "contrast": 0.808,
+   "noise_level": 0.783,
+   "optimal_sigma": 1.638,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 158,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0159",
+   "layer": "V1",
+   "pattern_density": 0.287,
+   "contrast": 0.385,
+   "noise_level": 0.059,
+   "optimal_sigma": 1.227,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 70.0,
+     "y": 314.5,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 552.2,
+     "y": 389.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 159,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0160",
+   "layer": "M2",
+   "pattern_density": 0.481,
+   "contrast": 0.682,
+   "noise_level": 0.538,
+   "optimal_sigma": 1.564,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 315.0,
+     "y": 238.1,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 160,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0161",
+   "layer": "M2",
+   "pattern_density": 0.213,
+   "contrast": 0.804,
+   "noise_level": 0.527,
+   "optimal_sigma": 1.078,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 402.0,
+     "y": 581.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 161,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0162",
+   "layer": "V1",
+   "pattern_density": 0.313,
+   "contrast": 0.619,
+   "noise_level": 0.418,
+   "optimal_sigma": 1.571,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 162,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0163",
+   "layer": "M1",
+   "pattern_density": 0.228,
+   "contrast": 0.262,
+   "noise_level": 0.245,
+   "optimal_sigma": 1.078,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 350.7,
+     "y": 573.7,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 385.4,
+     "y": 504.3,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "bridge",
+     "x": 449.4,
+     "y": 408.4,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 163,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0164",
+   "layer": "V1",
+   "pattern_density": 0.224,
+   "contrast": 0.839,
+   "noise_level": 0.171,
+   "optimal_sigma": 1.803,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [],
+   "seed": 164,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0165",
+   "layer": "M2",
+   "pattern_density": 0.6,
+   "contrast": 0.275,
+   "noise_level": 0.604,
+   "optimal_sigma": 1.534,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 234.2,
+     "y": 345.7,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 165,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0166",
+   "layer": "M2",
+   "pattern_density": 0.205,
+   "contrast": 0.281,
+   "noise_level": 0.294,
+   "optimal_sigma": 1.577,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 179.5,
+     "y": 293.9,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 403.0,
+     "y": 531.6,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 166,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0167",
+   "layer": "M2",
+   "pattern_density": 0.654,
+   "contrast": 0.311,
+   "noise_level": 0.284,
+   "optimal_sigma": 1.543,
+   "charging": true,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 104.4,
+     "y": 166.8,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 526.2,
+     "y": 240.2,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_2",
+     "type": "open",
+     "x": 257.9,
+     "y": 342.9,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 167,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0168",
+   "layer": "M2",
+   "pattern_density": 0.74,
+   "contrast": 0.561,
+   "noise_level": 0.405,
+   "optimal_sigma": 1.618,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 168,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0169",
+   "layer": "M2",
+   "pattern_density": 0.665,
+   "contrast": 0.464,
+   "noise_level": 0.186,
+   "optimal_sigma": 1.822,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 49.4,
+     "y": 397.0,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 363.0,
+     "y": 23.3,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 169,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0170",
+   "layer": "V1",
+   "pattern_density": 0.446,
+   "contrast": 0.61,
+   "noise_level": 0.748,
+   "optimal_sigma": 1.737,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 170,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0171",
+   "layer": "M2",
+   "pattern_density": 0.566,
+   "contrast": 0.753,
+   "noise_level": 0.267,
+   "optimal_sigma": 1.395,
+   "charging": false,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 439.1,
+     "y": 388.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 171,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0172",
+   "layer": "V1",
+   "pattern_density": 0.406,
+   "contrast": 0.694,
+   "noise_level": 0.786,
+   "optimal_sigma": 1.443,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 172,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0173",
+   "layer": "M2",
+   "pattern_density": 0.256,
+   "contrast": 0.774,
+   "noise_level": 0.287,
+   "optimal_sigma": 1.371,
+   "charging": true,
+   "cross_die_repeat": true,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 538.6,
+     "y": 554.5,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "bridge",
+     "x": 200.7,
+     "y": 402.3,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 173,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0174",
+   "layer": "V1",
+   "pattern_density": 0.608,
+   "contrast": 0.81,
+   "noise_level": 0.63,
+   "optimal_sigma": 1.209,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "bridge",
+     "x": 11.4,
+     "y": 241.5,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 174,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0175",
+   "layer": "V1",
+   "pattern_density": 0.214,
+   "contrast": 0.687,
+   "noise_level": 0.54,
+   "optimal_sigma": 1.744,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 519.6,
+     "y": 518.3,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "intrusion",
+     "x": 366.1,
+     "y": 293.4,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 175,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0176",
+   "layer": "V1",
+   "pattern_density": 0.813,
+   "contrast": 0.395,
+   "noise_level": 0.301,
+   "optimal_sigma": 1.464,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 179.3,
+     "y": 258.1,
+     "near_corner": true,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 289.1,
+     "y": 189.0,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 176,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0177",
+   "layer": "M1",
+   "pattern_density": 0.653,
+   "contrast": 0.674,
+   "noise_level": 0.219,
+   "optimal_sigma": 1.035,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "intrusion",
+     "x": 67.1,
+     "y": 542.8,
+     "near_corner": false,
+     "near_line_end": true
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 446.8,
+     "y": 165.4,
+     "near_corner": false,
+     "near_line_end": true
+    }
+   ],
+   "seed": 177,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0178",
+   "layer": "M1",
+   "pattern_density": 0.449,
+   "contrast": 0.838,
+   "noise_level": 0.04,
+   "optimal_sigma": 1.371,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [],
+   "seed": 178,
+   "image_path": null
+  },
+  {
+   "case_id": "case_0179",
+   "layer": "M1",
+   "pattern_density": 0.458,
+   "contrast": 0.365,
+   "noise_level": 0.237,
+   "optimal_sigma": 1.065,
+   "charging": false,
+   "cross_die_repeat": false,
+   "defects": [
+    {
+     "defect_id": "gt_0",
+     "type": "open",
+     "x": 28.0,
+     "y": 403.7,
+     "near_corner": false,
+     "near_line_end": false
+    },
+    {
+     "defect_id": "gt_1",
+     "type": "open",
+     "x": 184.0,
+     "y": 198.2,
+     "near_corner": false,
+     "near_line_end": false
+    }
+   ],
+   "seed": 179,
+   "image_path": null
+  }
+ ]
+}

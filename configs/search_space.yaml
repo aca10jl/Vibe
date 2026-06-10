@@ -1,0 +1,16 @@
+# L1 可调参数白名单。config_mutator 只允许改这里列出的路径，且必须落在 range 内。
+# 本文件属于只读禁区：Agent 不可修改。
+parameters:
+  alignment.max_iterations:        { type: int,   range: [10, 60] }
+  alignment.min_correlation:       { type: float, range: [0.30, 0.90] }
+  contour.gradient_sigma:          { type: float, range: [0.60, 3.00] }
+  contour.snr_threshold:           { type: float, range: [1.00, 4.00] }
+  contour.charging_compensation:   { type: bool }
+  render.corner_rounding_nm:       { type: float, range: [0.0, 15.0] }
+  render.line_end_shortening_nm:   { type: float, range: [0.0, 10.0] }
+  gauge.epe_threshold_nm:          { type: float, range: [1.5, 6.0] }
+  gauge.line_end_tolerance_nm:     { type: float, range: [2.0, 8.0] }
+  gauge.density_adaptive:          { type: bool }
+  judge.min_defect_score:          { type: float, range: [0.20, 0.90] }
+  judge.proc_var_filter:           { type: bool }
+  judge.cross_die_votes:           { type: int,   range: [1, 5] }

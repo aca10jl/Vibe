@@ -1,0 +1,21 @@
+algo:
+  backend: simulated
+alignment:
+  coarse_search_px: 8
+  max_iterations: 20
+  min_correlation: 0.6
+contour:
+  charging_compensation: true
+  gradient_sigma: 1.45
+  snr_threshold: 2.0
+gauge:
+  density_adaptive: false
+  epe_threshold_nm: 3.0
+  line_end_tolerance_nm: 3.0
+judge:
+  cross_die_votes: 3
+  min_defect_score: 0.5
+  proc_var_filter: true
+render:
+  corner_rounding_nm: 8.0
+  line_end_shortening_nm: 6.0
