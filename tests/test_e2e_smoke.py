@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_closed_loop_improves_metrics(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     from src.agent.graph import run_session
 
     state = run_session(split="mini", iterations=8,
@@ -43,7 +44,8 @@ def test_closed_loop_improves_metrics(monkeypatch):
 
 def test_golden_split_never_used_by_loop(monkeypatch):
     """golden 隔离：闭环只允许 dev/mini。"""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     import inspect
 
     from src import cli

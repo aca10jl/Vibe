@@ -17,7 +17,8 @@ python -m src.cli eval --split dev --baseline   # 跑通并存档 baseline
 # 失败分桶 + 证据包
 python -m src.cli triage --exp <exp_id>
 
-# Agent 闭环（默认 offline 规则版 LLM；设 ANTHROPIC_API_KEY 后自动切换 API 模式）
+# Agent 闭环（默认 offline 规则版 LLM；设 OPENAI_BASE_URL / OPENAI_API_KEY 或在
+# configs/tuner.yaml 中设 llm.mode: api 后，走 OpenAI 兼容接口的本地大模型）
 python -m src.cli loop --iterations 5
 
 # golden 集仅里程碑回归，结果绝不回传 Agent
@@ -31,7 +32,8 @@ pytest tests/ -q
 
 - `configs/algo/baseline.yaml` — 算法参数基线；`configs/algo/current.yaml` — 当前合入的最优参数
 - `configs/search_space.yaml` — L1 可调参数白名单（路径 + 类型 + 取值范围），mutator 硬校验
-- `configs/tuner.yaml` — Agent 自身配置：回归门禁规则、预算、LLM 模式
+- `configs/tuner.yaml` — Agent 自身配置：回归门禁规则、预算、LLM 全部参数
+  （`llm.api` 段：OpenAI 兼容接口 base_url / 多模态与语言模型名 / 采样参数等）
 - `src/contracts/` — pydantic 数据契约（PLAN.md 第 3 节 Schema 的唯一实现）
 - `src/algo/` — 被优化算法的适配层。`simulated.py` 为确定性仿真实现（用于开发/测试全链路）；接入真实 Die2Database 算法时实现 `interface.AlgoBackend` 协议并在 algo 配置中设 `backend: real`（见下）
 - `src/eval/`、`src/triage/`、`src/agent/`、`src/apply/`、`src/guard/`、`src/tracking/` — 见 PLAN.md 第 2 节

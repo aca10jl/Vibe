@@ -1,16 +1,21 @@
 """DIAGNOSE / PROPOSE 两个 LLM 节点的客户端。
 
-- ClaudeLLM：调用 Anthropic API（多模态读证据包，结构化输出 JSON）。
-- OfflineLLM：确定性规则版，用于无 API key 的开发/测试，行为与提示词中的
+- OpenAICompatLLM：调用任意 OpenAI 兼容接口（vLLM / Ollama / LMDeploy / SGLang
+  等本地部署的多模态与语言大模型）。所有连接与模型参数集中在
+  configs/tuner.yaml 的 llm.api 段，环境变量 OPENAI_BASE_URL / OPENAI_API_KEY
+  优先于配置文件。
+- OfflineLLM：确定性规则版，用于无可用模型服务的开发/测试，行为与提示词中的
   参考方向一致，保证闭环可离线复现。
 
-llm.mode=auto 时：有 ANTHROPIC_API_KEY 用 ClaudeLLM，否则 OfflineLLM。
+llm.mode=auto 时：设了 OPENAI_BASE_URL 或 OPENAI_API_KEY 用 OpenAICompatLLM，
+否则 OfflineLLM。
 """
 from __future__ import annotations
 
 import base64
 import json
 import os
+import re
 from pathlib import Path
 
 from src.contracts import BucketsFile, Diagnosis, EvalReport, Proposal
@@ -60,25 +65,40 @@ _PROPOSAL_SCHEMA = {
 
 
 def make_llm(tuner_cfg: dict):
-    mode = tuner_cfg["llm"]["mode"]
-    if mode == "api" or (mode == "auto" and os.environ.get("ANTHROPIC_API_KEY")):
-        return ClaudeLLM(model=tuner_cfg["llm"]["model"])
+    llm_cfg = tuner_cfg["llm"]
+    mode = llm_cfg["mode"]
+    env_configured = bool(os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_KEY"))
+    if mode == "api" or (mode == "auto" and env_configured):
+        return OpenAICompatLLM(llm_cfg["api"])
     return OfflineLLM()
 
 
-# ===================================================================== API 版
-class ClaudeLLM:
-    def __init__(self, model: str = "claude-opus-4-8"):
-        import anthropic
+def extract_json(text: str) -> dict:
+    """从模型输出中稳健地提取 JSON 对象（容忍 ```json 围栏与前后缀文本）。"""
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.M)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError(f"模型输出中找不到 JSON 对象: {text[:200]!r}")
+    return json.loads(text[start:end + 1])
 
-        self.client = anthropic.Anthropic()
-        self.model = model
+
+# ====================================================== OpenAI 兼容接口版
+class OpenAICompatLLM:
+    def __init__(self, api_cfg: dict):
+        from openai import OpenAI
+
+        self.cfg = api_cfg
+        self.client = OpenAI(
+            base_url=os.environ.get("OPENAI_BASE_URL") or api_cfg["base_url"],
+            api_key=os.environ.get("OPENAI_API_KEY") or api_cfg.get("api_key") or "EMPTY",
+            timeout=api_cfg.get("timeout_s", 180),
+        )
 
     @staticmethod
     def _image_block(path: Path) -> dict:
-        return {"type": "image",
-                "source": {"type": "base64", "media_type": "image/png",
-                           "data": base64.standard_b64encode(path.read_bytes()).decode()}}
+        data = base64.standard_b64encode(path.read_bytes()).decode()
+        return {"type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{data}"}}
 
     def _evidence_blocks(self, buckets: BucketsFile, max_per_bucket: int) -> list[dict]:
         blocks: list[dict] = []
@@ -92,23 +112,34 @@ class ClaudeLLM:
                            "text": f"## 失败 case {a.case_id}（初判 {a.bucket}）\n"
                                    f"context: {(ev / 'context.json').read_text()}\n"
                                    f"intermediates: {(ev / 'intermediates.json').read_text()}"})
-            for img in ("sem_raw.png", "overlay.png", "epe_heatmap.png"):
-                p = ev / img
-                if p.exists():
-                    blocks.append(self._image_block(p))
+            if self.cfg.get("send_images", True):
+                for img in ("sem_raw.png", "overlay.png", "epe_heatmap.png"):
+                    p = ev / img
+                    if p.exists():
+                        blocks.append(self._image_block(p))
         return blocks
 
-    def _call(self, system: str, content: list[dict], schema: dict) -> dict:
-        resp = self.client.messages.create(
-            model=self.model,
-            max_tokens=16000,
-            thinking={"type": "adaptive"},
-            system=system,
-            messages=[{"role": "user", "content": content}],
-            output_config={"format": {"type": "json_schema", "schema": schema}},
+    def _call(self, model: str, system: str, user_content: list[dict] | str,
+              schema: dict) -> dict:
+        system = (f"{system}\n\n## 输出 JSON Schema（严格遵守，只输出 JSON）\n"
+                  f"{json.dumps(schema, ensure_ascii=False)}")
+        kwargs: dict = dict(
+            model=model,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": user_content}],
+            temperature=self.cfg.get("temperature", 0.2),
+            max_tokens=self.cfg.get("max_tokens", 4096),
         )
-        text = next(b.text for b in resp.content if b.type == "text")
-        return json.loads(text)
+        if self.cfg.get("use_json_mode", True):
+            kwargs["response_format"] = {"type": "json_object"}
+        try:
+            resp = self.client.chat.completions.create(**kwargs)
+        except Exception:
+            if "response_format" not in kwargs:
+                raise
+            kwargs.pop("response_format")  # 部分本地服务不支持 json mode，降级重试
+            resp = self.client.chat.completions.create(**kwargs)
+        return extract_json(resp.choices[0].message.content or "")
 
     def diagnose(self, report: EvalReport, buckets: BucketsFile,
                  cooldown: set[str], max_per_bucket: int = 3) -> Diagnosis:
@@ -120,21 +151,20 @@ class ClaudeLLM:
                      f"## 冷却中的桶（不要选）\n{sorted(cooldown)}"},
             *self._evidence_blocks(buckets, max_per_bucket),
         ]
-        out = self._call(system, content, _DIAGNOSIS_SCHEMA)
+        out = self._call(self.cfg["vision_model"], system, content, _DIAGNOSIS_SCHEMA)
         return Diagnosis(exp_id=report.exp_id, **out)
 
     def propose(self, diagnosis: Diagnosis, report: EvalReport, buckets: BucketsFile,
                 config: dict, search_space: dict, history: list[dict],
                 max_changes: int) -> Proposal:
         system = (PROMPTS / "propose.md").read_text()
-        content = [{"type": "text", "text":
-                    f"## 根因分析\n{diagnosis.model_dump_json()}\n"
-                    f"## 当前 config\n{json.dumps(config, ensure_ascii=False)}\n"
-                    f"## search_space 白名单\n{json.dumps(search_space, ensure_ascii=False)}\n"
-                    f"## max_changes\n{max_changes}\n"
-                    f"## history（最近的提案与结果）\n"
-                    f"{json.dumps(history[-6:], ensure_ascii=False)}"}]
-        out = self._call(system, content, _PROPOSAL_SCHEMA)
+        user = (f"## 根因分析\n{diagnosis.model_dump_json()}\n"
+                f"## 当前 config\n{json.dumps(config, ensure_ascii=False)}\n"
+                f"## search_space 白名单\n{json.dumps(search_space, ensure_ascii=False)}\n"
+                f"## max_changes\n{max_changes}\n"
+                f"## history（最近的提案与结果）\n"
+                f"{json.dumps(history[-6:], ensure_ascii=False)}")
+        out = self._call(self.cfg["chat_model"], system, user, _PROPOSAL_SCHEMA)
         from src.apply.config_mutator import _get  # 当前值回填 from 字段
 
         changes = []
