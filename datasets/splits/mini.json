@@ -1,0 +1,25 @@
+{
+ "split": "mini",
+ "case_ids": [
+  "case_0000",
+  "case_0007",
+  "case_0018",
+  "case_0026",
+  "case_0034",
+  "case_0044",
+  "case_0053",
+  "case_0061",
+  "case_0071",
+  "case_0079",
+  "case_0088",
+  "case_0098",
+  "case_0107",
+  "case_0115",
+  "case_0126",
+  "case_0135",
+  "case_0143",
+  "case_0153",
+  "case_0162",
+  "case_0169"
+ ]
+}

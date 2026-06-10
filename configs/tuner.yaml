@@ -1,0 +1,26 @@
+# D2DB-Tuner Agent 自身配置（只读禁区）
+llm:
+  mode: auto                 # auto: 有 ANTHROPIC_API_KEY 则走 API，否则 offline 规则版
+  model: claude-opus-4-8
+  max_evidence_cases_per_bucket: 3   # DIAGNOSE 每桶最多看几个证据包
+
+regression_gate:
+  dataset: dev
+  rules:
+    overall_recall_drop_max: 0.002        # 总 recall 几乎不许降
+    per_type_recall_drop_max: 0.005       # 任一类型 recall 容差 0.5%
+    nuisance_rate_rise_max: 0.005
+    epe_p95_ratio_max: 1.10
+  on_fail: rollback
+
+budget:
+  max_iterations_per_session: 20
+  max_wall_hours: 8.0
+  max_l1_changes_per_proposal: 3
+
+convergence:
+  hypothesis_cooldown_after_failures: 2   # 同一假设连续失败 2 次则冷却该桶
+
+golden_policy:
+  run_only_at: milestone
+  feed_back_to_agent: false

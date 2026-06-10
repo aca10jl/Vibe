@@ -1,0 +1,27 @@
+# Die2Database 算法参数基线（被优化对象的可调参数面）
+algo:
+  backend: simulated        # simulated | real
+
+alignment:                  # SEM-GDS 对齐
+  coarse_search_px: 8
+  max_iterations: 20
+  min_correlation: 0.60
+
+contour:                    # SEM 轮廓提取
+  gradient_sigma: 1.80
+  snr_threshold: 2.0
+  charging_compensation: false
+
+render:                     # GDS 渲染（真实形貌建模）
+  corner_rounding_nm: 0.0
+  line_end_shortening_nm: 0.0
+
+gauge:                      # EPE 计算与阈值
+  epe_threshold_nm: 3.0
+  line_end_tolerance_nm: 3.0
+  density_adaptive: false
+
+judge:                      # 缺陷判定
+  min_defect_score: 0.50
+  proc_var_filter: false
+  cross_die_votes: 1
